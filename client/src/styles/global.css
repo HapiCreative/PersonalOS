@@ -1,0 +1,130 @@
+/* Global styles — Design tokens from Section 9.4, Typography from Section 9.3 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Section 9.4: Design Tokens */
+  --color-background: #0A0A0B;
+  --color-surface: #111113;
+  --color-border: #27272A;
+  --color-text: #D4D4D8;
+  --color-text-muted: #71717A;
+  --color-accent: #22D3EE;
+  --color-violet: #A78BFA;
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  --radius: 4px;
+
+  /* Section 9.3: Typography */
+  --font-sans: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  /* Section 9.1: Layout */
+  --rail-width: 48px;
+  --list-pane-width: 240px;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Section 9.3: Shell and nav labels use IBM Plex Sans 600 */
+.nav-label {
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+/* Section 9.3: Metadata, badges, IDs use IBM Plex Mono 400 */
+.meta, .badge, .id-display {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+/* Section 9.3: Headings in detail use IBM Plex Sans 600 */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+/* Links */
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* Focus */
+:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Buttons base */
+button {
+  font-family: var(--font-sans);
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--color-text);
+}
+
+input, textarea, select {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
