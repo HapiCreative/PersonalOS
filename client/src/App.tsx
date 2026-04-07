@@ -17,6 +17,7 @@ import { TodayView } from './domains/today/TodayView';
 import { ReviewModule } from './domains/review/ReviewModule';
 import { CleanupModule } from './domains/cleanup/CleanupModule';
 import { AIModule } from './domains/ai/AIModule';
+import { AnalyticsModule } from './domains/analytics/AnalyticsModule';
 import { PlaceholderModule } from './components/common/PlaceholderModule';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { SettingsModule } from './domains/settings/SettingsModule';
@@ -81,6 +82,8 @@ function AppContent() {
               return <AIModule />;
             case 'cleanup':
               return <CleanupModule onNavigate={(m) => onNavigate(m as NavModule)} />;
+            case 'analytics':
+              return <AnalyticsModule />;
             case 'templates':
               return <TemplatesModule />;
             case 'settings':
