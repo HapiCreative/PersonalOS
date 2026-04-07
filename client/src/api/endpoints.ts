@@ -66,6 +66,15 @@ import type {
   StaleCheckResponse,
   // Phase 7
   DailyPlanResponse,
+  // Phase 8
+  ProjectResponse,
+  ProjectListResponse,
+  ProjectWithLinksResponse,
+  ProjectStatus,
+  WeeklyReviewSummaryResponse,
+  WeeklySnapshotResponse,
+  MonthlyReviewSummaryResponse,
+  MonthlySnapshotResponse,
   DailyPlanListResponse,
   FocusSessionResponse,
   FocusSessionListResponse,
@@ -545,4 +554,64 @@ export const memoryApi = {
     review_at?: string | null;
     tags?: string[];
   }) => api.put<MemoryResponse>(`/memory/${nodeId}`, data),
+};
+
+// =============================================================================
+// Phase 8: Projects + Weekly/Monthly Reviews
+// =============================================================================
+
+// Projects (Core)
+export const projectsApi = {
+  list: (params?: { status?: ProjectStatus; include_archived?: boolean; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.include_archived) query.set('include_archived', 'true');
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<ProjectListResponse>(`/projects?${query}`);
+  },
+  get: (nodeId: string) => api.get<ProjectWithLinksResponse>(`/projects/${nodeId}`),
+  create: (data: {
+    title: string;
+    summary?: string;
+    status?: ProjectStatus;
+    description?: string;
+    tags?: string[];
+  }) => api.post<ProjectResponse>('/projects', data),
+  update: (nodeId: string, data: {
+    title?: string;
+    summary?: string;
+    status?: ProjectStatus;
+    description?: string | null;
+    tags?: string[];
+  }) => api.put<ProjectResponse>(`/projects/${nodeId}`, data),
+};
+
+// Weekly Review (Behavioral)
+export const weeklyReviewApi = {
+  get: (referenceDate?: string) => {
+    const query = new URLSearchParams();
+    if (referenceDate) query.set('reference_date', referenceDate);
+    return api.get<WeeklyReviewSummaryResponse>(`/review/weekly?${query}`);
+  },
+  save: (data: {
+    focus_areas: string[];
+    priority_task_ids?: string[];
+    notes?: string;
+    reference_date?: string;
+  }) => api.post<WeeklySnapshotResponse>('/review/weekly', data),
+};
+
+// Monthly Review (Behavioral)
+export const monthlyReviewApi = {
+  get: (referenceDate?: string) => {
+    const query = new URLSearchParams();
+    if (referenceDate) query.set('reference_date', referenceDate);
+    return api.get<MonthlyReviewSummaryResponse>(`/review/monthly?${query}`);
+  },
+  save: (data: {
+    focus_areas: string[];
+    notes?: string;
+    reference_date?: string;
+  }) => api.post<MonthlySnapshotResponse>('/review/monthly', data),
 };

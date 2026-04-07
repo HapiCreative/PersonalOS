@@ -12,8 +12,8 @@ Invariants:
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from server.app.core.db.database import Base
@@ -192,4 +192,101 @@ class SnoozeRecord(Base):
         CheckConstraint("snoozed_until > created_at", name="snooze_future"),
         Index("idx_snooze_records_node", "node_id"),
         Index("idx_snooze_records_until", "snoozed_until"),
+    )
+
+
+# =============================================================================
+# Phase 8: Weekly + Monthly Snapshots
+# =============================================================================
+
+
+class WeeklySnapshot(Base):
+    """
+    Section 3.2 (TABLE 22): weekly_snapshots temporal table.
+    Weekly review output. Captures focus areas, priority tasks, and notes.
+
+    Invariant T-01: No temporal-to-temporal FKs (references Core users + nodes only).
+    Invariant T-04: user_id must match owner_id of referenced task nodes.
+    """
+    __tablename__ = "weekly_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    week_start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    week_end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    focus_areas: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        nullable=False,
+        default=list,
+        comment="Key focus areas for the week (TEXT[])",
+    )
+    priority_task_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        nullable=True,
+        comment="Tasks prioritized for next week (references nodes.id)",
+    )
+    notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Summary: AI-generated + user-edited",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "week_start_date", name="uq_weekly_snapshots_user_week"),
+        Index("idx_weekly_snapshots_user", "user_id"),
+        Index("idx_weekly_snapshots_week", "week_start_date"),
+    )
+
+
+class MonthlySnapshot(Base):
+    """
+    Section 3.3 (TABLE 23): monthly_snapshots temporal table.
+    Monthly review output. Captures strategic focus areas and reflection notes.
+
+    Invariant T-01: No temporal-to-temporal FKs (references Core users only).
+    Invariant T-04: user_id must match owner_id.
+    """
+    __tablename__ = "monthly_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    month: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+        comment="First day of the month",
+    )
+    focus_areas: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        nullable=False,
+        default=list,
+        comment="Strategic focus areas (TEXT[])",
+    )
+    notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Strategic reflection notes",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "month", name="uq_monthly_snapshots_user_month"),
+        Index("idx_monthly_snapshots_user", "user_id"),
+        Index("idx_monthly_snapshots_month", "month"),
     )

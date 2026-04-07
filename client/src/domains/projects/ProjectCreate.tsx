@@ -1,59 +1,39 @@
 /**
- * Goal creation form with timeframe fields.
- * Section 2.4: goal_nodes companion table.
+ * Project creation form.
+ * Section 2.4 (TABLE 19): project_nodes companion table.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { tokens } from '../../styles/tokens';
-import { goalsApi, projectsApi, edgesApi } from '../../api/endpoints';
-import type { ProjectResponse } from '../../types';
+import { projectsApi } from '../../api/endpoints';
 
-interface GoalCreateProps {
+interface ProjectCreateProps {
   onCreated: () => void;
   onCancel: () => void;
 }
 
-export function GoalCreate({ onCreated, onCancel }: GoalCreateProps) {
+export function ProjectCreate({ onCreated, onCancel }: ProjectCreateProps) {
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [timeframeLabel, setTimeframeLabel] = useState('');
-  const [notes, setNotes] = useState('');
+  const [description, setDescription] = useState('');
+  const [tags, setTags] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Phase 8: Project selector
-  const [projects, setProjects] = useState<ProjectResponse[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState('');
-
-  useEffect(() => {
-    projectsApi.list({ status: 'active' }).then((res) => setProjects(res.items)).catch(() => setProjects([]));
-  }, []);
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
     setSaving(true);
     setError(null);
     try {
-      const newGoal = await goalsApi.create({
+      await projectsApi.create({
         title: title.trim(),
         summary: summary || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-        timeframe_label: timeframeLabel || undefined,
-        notes: notes || undefined,
+        description: description || undefined,
+        tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : undefined,
       });
-      // Phase 8: Assign to project via belongs_to edge (Invariant G-05)
-      if (selectedProjectId) {
-        await edgesApi.create({
-          source_id: newGoal.node_id,
-          target_id: selectedProjectId,
-          relation_type: 'belongs_to',
-        });
-      }
       onCreated();
     } catch (e: any) {
-      setError(e.message || 'Failed to create goal');
+      setError(e.message || 'Failed to create project');
     } finally {
       setSaving(false);
     }
@@ -61,7 +41,7 @@ export function GoalCreate({ onCreated, onCancel }: GoalCreateProps) {
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.heading}>New Goal</h2>
+      <h2 style={styles.heading}>New Project</h2>
 
       {error && <div style={styles.error}>{error}</div>}
 
@@ -71,7 +51,7 @@ export function GoalCreate({ onCreated, onCancel }: GoalCreateProps) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           style={styles.input}
-          placeholder="Goal title"
+          placeholder="Project title"
           autoFocus
         />
       </div>
@@ -82,71 +62,34 @@ export function GoalCreate({ onCreated, onCancel }: GoalCreateProps) {
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
           style={styles.input}
-          placeholder="Brief description"
+          placeholder="Brief summary"
         />
       </div>
 
-      <div style={styles.row}>
-        <div style={styles.field}>
-          <label style={styles.label}>Start Date</label>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            style={styles.input}
-          />
-        </div>
-        <div style={styles.field}>
-          <label style={styles.label}>End Date</label>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            style={styles.input}
-          />
-        </div>
-        <div style={styles.field}>
-          <label style={styles.label}>Timeframe</label>
-          <input
-            value={timeframeLabel}
-            onChange={(e) => setTimeframeLabel(e.target.value)}
-            style={styles.input}
-            placeholder="e.g. Q1 2026"
-          />
-        </div>
-      </div>
-
-      {/* Phase 8: Project selector */}
-      {projects.length > 0 && (
-        <div style={styles.field}>
-          <label style={styles.label}>Project</label>
-          <select
-            value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
-            style={styles.input}
-          >
-            <option value="">None</option>
-            {projects.map((p) => (
-              <option key={p.node_id} value={p.node_id}>{p.title}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
       <div style={styles.field}>
-        <label style={styles.label}>Notes</label>
+        <label style={styles.label}>Description</label>
         <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
           style={styles.textArea}
           rows={4}
-          placeholder="Optional notes..."
+          placeholder="Detailed description..."
+        />
+      </div>
+
+      <div style={styles.field}>
+        <label style={styles.label}>Tags (comma-separated)</label>
+        <input
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          style={styles.input}
+          placeholder="e.g. work, personal"
         />
       </div>
 
       <div style={styles.actions}>
         <button onClick={handleSubmit} disabled={saving || !title.trim()} style={styles.saveButton}>
-          {saving ? 'Creating...' : 'Create Goal'}
+          {saving ? 'Creating...' : 'Create Project'}
         </button>
         <button onClick={onCancel} style={styles.cancelButton}>Cancel</button>
       </div>
@@ -203,7 +146,6 @@ const styles: Record<string, React.CSSProperties> = {
     resize: 'vertical' as const,
     lineHeight: 1.5,
   },
-  row: { display: 'flex', gap: 12 },
   actions: { display: 'flex', gap: 8, marginTop: 16 },
   saveButton: {
     padding: '8px 16px',

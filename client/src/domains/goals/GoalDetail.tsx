@@ -5,10 +5,10 @@
 
 import { useState, useEffect } from 'react';
 import { tokens } from '../../styles/tokens';
-import { goalsApi } from '../../api/endpoints';
+import { goalsApi, projectsApi, edgesApi } from '../../api/endpoints';
 import { EdgeChips } from '../../components/edges/EdgeChips';
 import { BacklinksDisplay } from '../../components/edges/BacklinksDisplay';
-import type { GoalResponse, GoalWithTasksResponse, GoalLinkedTaskResponse, GoalStatus } from '../../types';
+import type { GoalResponse, GoalWithTasksResponse, GoalLinkedTaskResponse, GoalStatus, ProjectResponse } from '../../types';
 
 const STATUS_COLORS: Record<GoalStatus, string> = {
   active: tokens.colors.accent,
@@ -38,6 +38,10 @@ export function GoalDetail({ goal, onUpdated }: GoalDetailProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailedGoal, setDetailedGoal] = useState<GoalWithTasksResponse | null>(null);
+  // Phase 8: Project selector
+  const [projects, setProjects] = useState<ProjectResponse[]>([]);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [assigningProject, setAssigningProject] = useState(false);
 
   useEffect(() => {
     setTitle(goal.title);
@@ -49,6 +53,14 @@ export function GoalDetail({ goal, onUpdated }: GoalDetailProps) {
     setEditing(false);
     // Fetch detailed view with linked tasks
     goalsApi.get(goal.node_id).then(setDetailedGoal).catch(() => setDetailedGoal(null));
+    // Phase 8: Load projects and current assignment
+    projectsApi.list({ status: 'active' }).then((res) => setProjects(res.items)).catch(() => setProjects([]));
+    edgesApi.getForNode(goal.node_id, { direction: 'outgoing', relation_type: 'belongs_to' })
+      .then((res) => {
+        const belongsTo = res.items.find((e) => e.relation_type === 'belongs_to');
+        setCurrentProjectId(belongsTo?.target_id ?? null);
+      })
+      .catch(() => setCurrentProjectId(null));
   }, [goal]);
 
   const currentGoal = detailedGoal || goal;
@@ -81,6 +93,36 @@ export function GoalDetail({ goal, onUpdated }: GoalDetailProps) {
       onUpdated();
     } catch (e: any) {
       setError(e.message || 'Status change failed');
+    }
+  };
+
+  // Phase 8: Assign goal to project via belongs_to edge (Invariant G-05)
+  const handleAssignProject = async (projectNodeId: string) => {
+    setAssigningProject(true);
+    setError(null);
+    try {
+      if (currentProjectId) {
+        const existing = await edgesApi.getForNode(goal.node_id, { direction: 'outgoing', relation_type: 'belongs_to' });
+        for (const edge of existing.items) {
+          if (edge.relation_type === 'belongs_to') {
+            await edgesApi.delete(edge.id);
+          }
+        }
+      }
+      if (projectNodeId !== '') {
+        await edgesApi.create({
+          source_id: goal.node_id,
+          target_id: projectNodeId,
+          relation_type: 'belongs_to',
+        });
+        setCurrentProjectId(projectNodeId);
+      } else {
+        setCurrentProjectId(null);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to assign project');
+    } finally {
+      setAssigningProject(false);
     }
   };
 
@@ -160,6 +202,33 @@ export function GoalDetail({ goal, onUpdated }: GoalDetailProps) {
           }} />
         </div>
       </div>
+
+      {/* Phase 8: Project selector - Invariant G-05 */}
+      {projects.length > 0 && (
+        <div style={styles.fieldRow}>
+          <span style={styles.fieldLabel}>Project:</span>
+          <select
+            value={currentProjectId || ''}
+            onChange={(e) => handleAssignProject(e.target.value)}
+            disabled={assigningProject}
+            style={{
+              background: tokens.colors.surface,
+              border: `1px solid ${tokens.colors.border}`,
+              borderRadius: tokens.radius,
+              color: tokens.colors.text,
+              fontFamily: tokens.fonts.mono,
+              fontSize: 12,
+              padding: '4px 8px',
+            }}
+          >
+            <option value="">None</option>
+            {projects.map((p) => (
+              <option key={p.node_id} value={p.node_id}>{p.title}</option>
+            ))}
+          </select>
+          {assigningProject && <span style={styles.fieldLabel}>Saving...</span>}
+        </div>
+      )}
 
       {/* Timeframe fields */}
       <div style={styles.fieldRow}>

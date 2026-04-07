@@ -25,6 +25,8 @@ from server.app.derived.router import router as derived_router
 from server.app.temporal.snooze_router import router as snooze_router
 from server.app.temporal.daily_plans_router import router as daily_plans_router
 from server.app.temporal.focus_sessions_router import router as focus_sessions_router
+from server.app.domains.projects.router import router as projects_router
+from server.app.behavioral.review_router import router as review_router
 
 app = FastAPI(
     title="Personal OS",
@@ -78,7 +80,11 @@ app.include_router(snooze_router)
 app.include_router(daily_plans_router)
 app.include_router(focus_sessions_router)
 
+# Phase 8: Projects + Weekly/Monthly Reviews
+app.include_router(projects_router)
+app.include_router(review_router)
+
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "0.7.0"}
+    return {"status": "ok", "version": "0.8.0"}

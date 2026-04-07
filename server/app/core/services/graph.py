@@ -17,6 +17,7 @@ EDGE_TYPE_PAIR_CONSTRAINTS: dict[EdgeRelationType, list[tuple[NodeType, NodeType
         (NodeType.TASK, NodeType.TASK),
         (NodeType.GOAL, NodeType.GOAL),
     ],
+    # Invariant G-05: belongs_to restricted to goal→project, task→project
     EdgeRelationType.BELONGS_TO: [
         (NodeType.GOAL, NodeType.PROJECT),
         (NodeType.TASK, NodeType.PROJECT),
