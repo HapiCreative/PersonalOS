@@ -6,9 +6,11 @@
 
 import { useState, useEffect } from 'react';
 import { tokens } from '../../styles/tokens';
-import { sourcesApi } from '../../api/endpoints';
+import { sourcesApi, llmApi } from '../../api/endpoints';
 import { EdgeChips } from '../../components/edges/EdgeChips';
 import { BacklinksDisplay } from '../../components/edges/BacklinksDisplay';
+import { EnrichmentDisplay } from '../../components/derived/EnrichmentDisplay';
+import { PipelineStatus } from '../../components/derived/PipelineStatus';
 import type { SourceResponse, FragmentResponse } from '../../types';
 
 interface SourceDetailProps {
@@ -185,13 +187,28 @@ export function SourceDetail({ source, onUpdated }: SourceDetailProps) {
         </div>
       )}
 
-      {/* AI Enrichments (temporary bridge fields) */}
-      {source.ai_summary && (
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>AI Summary</h3>
-          <p style={styles.content}>{source.ai_summary}</p>
-        </div>
-      )}
+      {/* Phase 9: AI Enrichments from node_enrichments table */}
+      <EnrichmentDisplay nodeId={source.node_id} />
+
+      {/* Phase 9: Pipeline status indicators */}
+      <PipelineStatus nodeId={source.node_id} />
+
+      {/* Phase 9: Enrich button */}
+      <div style={styles.triageRow}>
+        <button
+          onClick={async () => {
+            try {
+              await llmApi.enrichSource(source.node_id);
+              onUpdated();
+            } catch (e: any) {
+              setError(e.message || 'Enrichment failed');
+            }
+          }}
+          style={{ ...styles.triageButton, color: tokens.colors.violet }}
+        >
+          Enrich with AI
+        </button>
+      </div>
 
       {/* Content */}
       <div style={styles.section}>

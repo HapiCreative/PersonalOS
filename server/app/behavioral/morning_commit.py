@@ -308,8 +308,13 @@ async def get_morning_suggestions(
             seen.add(s.node_id)
             deduped.append(s)
 
-    # Generate AI briefing stub
-    briefing = _generate_ai_briefing_stub(deduped, today)
+    # Phase 9: Generate AI briefing (full AI integration)
+    try:
+        from server.app.behavioral.ai_modes import generate_briefing
+        briefing = await generate_briefing(db, owner_id)
+    except Exception:
+        # Fallback to heuristic briefing if AI fails
+        briefing = _generate_ai_briefing_stub(deduped, today)
 
     return MorningCommitSuggestions(
         suggested_tasks=deduped,

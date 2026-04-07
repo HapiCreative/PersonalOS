@@ -21,7 +21,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { tokens } from '../../styles/tokens';
-import { derivedApi, edgesApi } from '../../api/endpoints';
+import { derivedApi, edgesApi, edgeStateApi, llmApi } from '../../api/endpoints';
 import type { ContextLayerResponse, ContextCategoryResponse, ContextItemResponse, EdgeState } from '../../types';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -98,11 +98,10 @@ export function ContextLayer({ nodeId, onNavigateToNode }: ContextLayerProps) {
     fetchContext();
   }, [fetchContext]);
 
+  // Phase 9: Link suggestion accept/dismiss via edge state transitions
   const handlePromoteLink = useCallback(async (edgeId: string) => {
     try {
-      await edgesApi.delete(edgeId);
-      // Re-create as active user edge would be complex — for now,
-      // we use the edge state update endpoint
+      await edgeStateApi.updateState(edgeId, 'active');
       await fetchContext();
     } catch (e: any) {
       console.error('Failed to promote link:', e);
@@ -111,12 +110,22 @@ export function ContextLayer({ nodeId, onNavigateToNode }: ContextLayerProps) {
 
   const handleDismissLink = useCallback(async (edgeId: string) => {
     try {
-      // Edge state update would go through a PATCH endpoint
+      await edgeStateApi.updateState(edgeId, 'dismissed');
       await fetchContext();
     } catch (e: any) {
       console.error('Failed to dismiss link:', e);
     }
   }, [fetchContext]);
+
+  // Phase 9: Trigger link suggestions for this node
+  const handleSuggestLinks = useCallback(async () => {
+    try {
+      await llmApi.suggestLinks(nodeId);
+      await fetchContext();
+    } catch (e: any) {
+      console.error('Failed to suggest links:', e);
+    }
+  }, [nodeId, fetchContext]);
 
   if (loading) {
     return (
@@ -170,6 +179,13 @@ export function ContextLayer({ nodeId, onNavigateToNode }: ContextLayerProps) {
           </span>
         )}
       </button>
+
+      {/* Phase 9: Suggest Links button */}
+      <div style={styles.suggestLinksRow}>
+        <button onClick={handleSuggestLinks} style={styles.suggestLinksButton}>
+          Suggest Links
+        </button>
+      </div>
 
       {!collapsed && (
         <div style={styles.categoriesContainer}>
@@ -509,5 +525,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     cursor: 'pointer',
     padding: 0,
+  },
+  suggestLinksRow: {
+    padding: '4px 16px 8px',
+    display: 'flex',
+    justifyContent: 'flex-end',
+  },
+  suggestLinksButton: {
+    fontFamily: tokens.fonts.mono,
+    fontSize: 10,
+    color: tokens.colors.violet,
+    background: `${tokens.colors.violet}10`,
+    border: `1px solid ${tokens.colors.violet}30`,
+    borderRadius: tokens.radius,
+    padding: '3px 8px',
+    cursor: 'pointer',
   },
 };

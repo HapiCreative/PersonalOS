@@ -82,6 +82,21 @@ import type {
   CommitResponse,
   EveningReflectionResponse,
   ReflectionSubmitResponse,
+  // Phase 9
+  AIModeResponse,
+  AIMode,
+  SuggestLinksResponse,
+  EnrichSourceResponse,
+  LintKBResponse,
+  ClassifyInboxResponse,
+  BriefingResponse,
+  EnrichmentResponse,
+  EnrichmentListResponse,
+  EnrichmentType,
+  PipelineJobResponse,
+  PipelineJobListResponse,
+  PipelineJobType,
+  PipelineJobStatus,
 } from '../types';
 
 // Auth
@@ -614,4 +629,61 @@ export const monthlyReviewApi = {
     notes?: string;
     reference_date?: string;
   }) => api.post<MonthlySnapshotResponse>('/review/monthly', data),
+};
+
+// =============================================================================
+// Phase 9: AI Modes + LLM Pipeline + Enrichments
+// =============================================================================
+
+// AI Modes (Section 5.5 — Behavioral)
+export const llmApi = {
+  query: (mode: AIMode, query: string) =>
+    api.post<AIModeResponse>('/llm/query', { mode, query }),
+  suggestLinks: (nodeId: string) =>
+    api.post<SuggestLinksResponse>(`/llm/suggest-links/${nodeId}`),
+  enrichSource: (nodeId: string) =>
+    api.post<EnrichSourceResponse>(`/llm/enrich-source/${nodeId}`),
+  lintKB: (nodeId: string) =>
+    api.post<LintKBResponse>(`/llm/lint-kb/${nodeId}`),
+  classifyInbox: (nodeId: string) =>
+    api.post<ClassifyInboxResponse>(`/llm/classify-inbox/${nodeId}`),
+  briefing: () =>
+    api.post<BriefingResponse>('/llm/briefing'),
+};
+
+// Node Enrichments (Section 4.8 — Derived)
+export const enrichmentsApi = {
+  getForNode: (nodeId: string, includeSupereded?: boolean) => {
+    const query = new URLSearchParams();
+    if (includeSupereded) query.set('include_superseded', 'true');
+    return api.get<EnrichmentListResponse>(`/enrichments/${nodeId}?${query}`);
+  },
+  getActive: (nodeId: string, enrichmentType: EnrichmentType) =>
+    api.get<EnrichmentResponse>(`/enrichments/${nodeId}/${enrichmentType}`),
+  getHistory: (nodeId: string, enrichmentType: EnrichmentType, limit?: number) => {
+    const query = new URLSearchParams();
+    if (limit) query.set('limit', String(limit));
+    return api.get<EnrichmentListResponse>(`/enrichments/${nodeId}/${enrichmentType}/history?${query}`);
+  },
+  rollback: (nodeId: string, enrichmentType: EnrichmentType, restoreEnrichmentId: string) =>
+    api.post<EnrichmentResponse>(`/enrichments/${nodeId}/${enrichmentType}/rollback`, {
+      restore_enrichment_id: restoreEnrichmentId,
+    }),
+};
+
+// Pipeline Jobs (Section 7.3)
+export const pipelineJobsApi = {
+  list: (params?: { job_type?: PipelineJobType; status?: PipelineJobStatus; target_node_id?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.job_type) query.set('job_type', params.job_type);
+    if (params?.status) query.set('status', params.status);
+    if (params?.target_node_id) query.set('target_node_id', params.target_node_id);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<PipelineJobListResponse>(`/pipeline-jobs?${query}`);
+  },
+  get: (jobId: string) =>
+    api.get<PipelineJobResponse>(`/pipeline-jobs/${jobId}`),
+  cancel: (jobId: string) =>
+    api.post<PipelineJobResponse>(`/pipeline-jobs/${jobId}/cancel`),
 };

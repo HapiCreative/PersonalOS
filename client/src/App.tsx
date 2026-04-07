@@ -16,6 +16,7 @@ import { ProjectsModule } from './domains/projects/ProjectsModule';
 import { TodayView } from './domains/today/TodayView';
 import { ReviewModule } from './domains/review/ReviewModule';
 import { CleanupModule } from './domains/cleanup/CleanupModule';
+import { AIModule } from './domains/ai/AIModule';
 import { PlaceholderModule } from './components/common/PlaceholderModule';
 import type { NavModule } from './components/layout/Rail';
 
@@ -73,6 +74,8 @@ function AppContent() {
               return <MemoryModule />;
             case 'review':
               return <ReviewModule />;
+            case 'ai':
+              return <AIModule />;
             case 'cleanup':
               return <CleanupModule onNavigate={(m) => onNavigate(m as NavModule)} />;
             case 'templates':
