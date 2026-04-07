@@ -31,6 +31,7 @@ from server.app.behavioral.llm_router import router as llm_router
 from server.app.derived.enrichments_router import router as enrichments_router
 from server.app.core.services.pipeline_router import router as pipeline_jobs_router
 from server.app.core.routers.admin import router as admin_router
+from server.app.derived.analytics_router import router as analytics_router
 
 app = FastAPI(
     title="Personal OS",
@@ -97,6 +98,9 @@ app.include_router(pipeline_jobs_router)
 
 # Phase 10: Admin (Export/Import, Retention, Caching, Batch Embedding)
 app.include_router(admin_router)
+
+# Phase PC: Analytics + Intelligence (Semantic Clustering, Smart Resurfacing)
+app.include_router(analytics_router)
 
 
 @app.get("/api/health")

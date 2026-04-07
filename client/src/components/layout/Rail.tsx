@@ -20,9 +20,10 @@ import {
   ClipboardList,
   Sparkles,
   Settings,
+  BarChart3,
 } from 'lucide-react';
 
-export type NavModule = 'today' | 'inbox' | 'tasks' | 'journal' | 'goals' | 'projects' | 'kb' | 'sources' | 'memory' | 'review' | 'templates' | 'cleanup' | 'ai' | 'settings';
+export type NavModule = 'today' | 'inbox' | 'tasks' | 'journal' | 'goals' | 'projects' | 'kb' | 'sources' | 'memory' | 'review' | 'templates' | 'cleanup' | 'ai' | 'analytics' | 'settings';
 
 interface RailProps {
   active: NavModule;
@@ -43,6 +44,7 @@ const navItems: { id: NavModule; icon: typeof Inbox; label: string }[] = [
   { id: 'ai', icon: Sparkles, label: 'AI' },
   { id: 'review', icon: ClipboardList, label: 'Review' },
   { id: 'cleanup', icon: Trash2, label: 'Cleanup' },
+  { id: 'analytics', icon: BarChart3, label: 'Analytics' },
   { id: 'templates', icon: Layout, label: 'Templates' },
   { id: 'settings', icon: Settings, label: 'Settings' },
 ];

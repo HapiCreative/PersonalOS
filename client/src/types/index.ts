@@ -998,3 +998,143 @@ export interface BatchEmbedResponse {
 export interface CacheRefreshResponse {
   materialized_views: Record<string, string>;
 }
+
+// =============================================================================
+// Phase PC: Analytics + Intelligence
+// =============================================================================
+
+// Invariant D-04: Analytics output classification
+export type AnalyticsClassification = 'descriptive' | 'correlational' | 'recommendation';
+
+// Analytics output (Invariant D-04: every output must be classified)
+export interface AnalyticsOutputResponse {
+  classification: AnalyticsClassification;
+  label: string; // "" for descriptive, "Pattern detected" for correlational, "Suggestion" for recommendation
+  explanation: DerivedExplanation;
+  data: Record<string, unknown>;
+}
+
+// Tier A: Operational metrics (live query - today/7d/14d)
+export interface TierAResponse {
+  period: string;
+  start_date: string;
+  end_date: string;
+  tasks_completed: number;
+  tasks_planned: number;
+  tasks_planned_completed: number;
+  planning_accuracy: number;
+  focus_seconds_total: number;
+  focus_sessions_count: number;
+  journal_entries: number;
+  avg_mood: number | null;
+  current_streak: number;
+}
+
+// Daily rollup (Tier B pre-aggregated)
+export interface DailyRollupResponse {
+  date: string;
+  tasks_completed: number;
+  tasks_planned: number;
+  tasks_planned_completed: number;
+  planning_accuracy: number;
+  focus_seconds_total: number;
+  focus_seconds_by_goal: Record<string, number>;
+  journal_mood_score: number | null;
+  active_goal_progress_delta: number;
+  streak_eligible_flag: boolean;
+  computed_at: string;
+}
+
+// Weekly rollup (Tier B pre-aggregated)
+export interface WeeklyRollupResponse {
+  week_start_date: string;
+  completion_rate: number;
+  planning_accuracy: number;
+  total_focus_time: number;
+  goal_time_distribution: Record<string, number>;
+  momentum: number;
+  drift_summary: { goal_id: string; drift_score: number }[];
+  avg_mood: number | null;
+  mood_productivity_correlation_inputs: {
+    date: string;
+    mood_score: number;
+    tasks_completed: number;
+    focus_seconds: number;
+  }[];
+  computed_at: string;
+}
+
+// Tier B response (pre-aggregated rollups)
+export interface TierBResponse {
+  period: string;
+  start_date: string;
+  end_date: string;
+  daily_rollups: DailyRollupResponse[];
+  weekly_rollups: WeeklyRollupResponse[];
+}
+
+// Execution Dashboard (primary view)
+export interface ExecutionDashboardResponse {
+  tier_a: TierAResponse;
+  insights: AnalyticsOutputResponse[];
+}
+
+// Strategic Alignment (secondary tab)
+export interface StrategicAlignmentResponse {
+  tier_b: TierBResponse;
+  insights: AnalyticsOutputResponse[];
+}
+
+// Wellbeing Patterns (tertiary overlay)
+export interface WellbeingPatternsResponse {
+  mood_data: { date: string; mood_score: number }[];
+  insights: AnalyticsOutputResponse[];
+}
+
+// Semantic clustering (Section 4.9)
+export interface ClusterMemberResponse {
+  node_id: string;
+  title: string;
+  type: string;
+  similarity: number;
+}
+
+export interface ClusterResponse {
+  cluster_id: string | null;
+  label: string;
+  node_count: number;
+  coherence_score: number;
+  members: ClusterMemberResponse[];
+}
+
+export interface ClustersListResponse {
+  clusters: ClusterResponse[];
+  total: number;
+}
+
+// Smart resurfacing (Section 4.10)
+export interface ResurfacedItemResponse {
+  node_id: string;
+  node_type: string;
+  title: string;
+  reason: string;
+  signal_score: number | null;
+  similarity: number | null;
+  cluster_label: string | null;
+  explanation: DerivedExplanation | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface ResurfacingResponse {
+  items: ResurfacedItemResponse[];
+  total: number;
+  mode: string; // "context" | "today"
+}
+
+// Rollup computation
+export interface RollupComputeResponse {
+  daily_count: number;
+  weekly_count: number;
+  start_date: string;
+  end_date: string;
+}

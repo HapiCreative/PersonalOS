@@ -104,6 +104,15 @@ import type {
   RetentionStatsResponse,
   BatchEmbedResponse,
   CacheRefreshResponse,
+  // Phase PC: Analytics + Intelligence
+  ExecutionDashboardResponse,
+  StrategicAlignmentResponse,
+  WellbeingPatternsResponse,
+  ClustersListResponse,
+  ClusterResponse,
+  ResurfacingResponse,
+  RollupComputeResponse,
+  DailyRollupResponse,
 } from '../types';
 
 // Auth
@@ -722,4 +731,66 @@ export const pipelineJobsApi = {
     api.get<PipelineJobResponse>(`/pipeline-jobs/${jobId}`),
   cancel: (jobId: string) =>
     api.post<PipelineJobResponse>(`/pipeline-jobs/${jobId}/cancel`),
+};
+
+// =============================================================================
+// Phase PC: Analytics + Intelligence
+// =============================================================================
+
+// Analytics Dashboard (Section 4.7)
+// Invariant D-04: All analytics outputs classified as descriptive/correlational/recommendation
+export const analyticsApi = {
+  // Execution Dashboard (primary view — Tier A live query)
+  getExecution: (period?: string) => {
+    const query = new URLSearchParams();
+    if (period) query.set('period', period);
+    return api.get<ExecutionDashboardResponse>(`/analytics/execution?${query}`);
+  },
+
+  // Strategic Alignment (secondary tab — Tier B rollups)
+  getStrategic: (period?: string) => {
+    const query = new URLSearchParams();
+    if (period) query.set('period', period);
+    return api.get<StrategicAlignmentResponse>(`/analytics/strategic?${query}`);
+  },
+
+  // Wellbeing Patterns (tertiary overlay — Tier B rollups)
+  getWellbeing: (period?: string) => {
+    const query = new URLSearchParams();
+    if (period) query.set('period', period);
+    return api.get<WellbeingPatternsResponse>(`/analytics/wellbeing?${query}`);
+  },
+
+  // Compute/recompute rollups
+  computeRollups: (days?: number) => {
+    const query = new URLSearchParams();
+    if (days) query.set('days', String(days));
+    return api.post<RollupComputeResponse>(`/analytics/rollups/compute?${query}`);
+  },
+  computeTodayRollup: () =>
+    api.post<DailyRollupResponse>('/analytics/rollups/compute-today'),
+
+  // Semantic Clustering (Section 4.9)
+  getClusters: () =>
+    api.get<ClustersListResponse>('/analytics/clusters'),
+  computeClusters: () =>
+    api.post<ClustersListResponse>('/analytics/clusters/compute'),
+  getNodeCluster: (nodeId: string) =>
+    api.get<ClusterResponse | null>(`/analytics/clusters/node/${nodeId}`),
+  getClusterPeers: (nodeId: string, limit?: number) => {
+    const query = new URLSearchParams();
+    if (limit) query.set('limit', String(limit));
+    return api.get<{ node_id: string; peers: unknown[]; total: number }>(
+      `/analytics/clusters/node/${nodeId}/peers?${query}`
+    );
+  },
+
+  // Smart Resurfacing (Section 4.10)
+  resurfaceContext: (nodeId: string, limit?: number) => {
+    const query = new URLSearchParams();
+    if (limit) query.set('limit', String(limit));
+    return api.get<ResurfacingResponse>(`/analytics/resurface/context/${nodeId}?${query}`);
+  },
+  resurfaceToday: () =>
+    api.get<ResurfacingResponse>('/analytics/resurface/today'),
 };
