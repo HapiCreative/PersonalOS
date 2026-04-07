@@ -59,6 +59,11 @@ import type {
   CompileStatus,
   PipelineStage,
   MemoryType,
+  CleanupQueueResponse,
+  CleanupAction,
+  CleanupActionResponse,
+  SnoozeResponse,
+  StaleCheckResponse,
 } from '../types';
 
 // Auth
@@ -415,6 +420,34 @@ export const derivedApi = {
 export const edgeStateApi = {
   updateState: (edgeId: string, state: EdgeState) =>
     api.patch<EdgeResponse>(`/edges/${edgeId}/state`, { state }),
+};
+
+// Cleanup (Phase 6 — Behavioral + Derived)
+export const cleanupApi = {
+  getQueue: (params?: { category?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.category) query.set('category', params.category);
+    if (params?.limit) query.set('limit', String(params.limit));
+    return api.get<CleanupQueueResponse>(`/cleanup/queue?${query}`);
+  },
+  executeAction: (data: { action: CleanupAction; node_ids: string[]; snoozed_until?: string }) =>
+    api.post<CleanupActionResponse>('/cleanup/action', data),
+};
+
+// Snooze (Phase 6 — Temporal)
+export const snoozeApi = {
+  create: (node_id: string, snoozed_until: string) =>
+    api.post<SnoozeResponse>('/snooze', { node_id, snoozed_until }),
+  remove: (node_id: string) =>
+    api.delete<{ removed: boolean; node_id: string }>('/snooze', { data: { node_id } }),
+  get: (nodeId: string) =>
+    api.get<SnoozeResponse | null>(`/snooze/${nodeId}`),
+};
+
+// Stale check (Phase 6 — Derived)
+export const staleApi = {
+  check: (nodeId: string) =>
+    api.get<StaleCheckResponse>(`/derived/stale/${nodeId}`),
 };
 
 // Memory (Phase 3)

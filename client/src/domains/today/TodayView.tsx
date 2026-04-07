@@ -21,7 +21,7 @@ const SECTION_LABELS: Record<string, string> = {
   habits: 'Habits',
   learning: 'Learning',
   goal_nudges: 'Goal Nudges',
-  review: 'Review',
+  review: 'Review & Cleanup',
   resurfaced: 'Resurfaced',
   journal: 'Journal',
 };
@@ -190,6 +190,8 @@ function TodayItemCard({ item, onNavigate }: { item: TodayItemResponse; onNaviga
       onNavigate('goals');
     } else if (item.item_type === 'journal_prompt') {
       onNavigate('journal');
+    } else if (item.item_type === 'cleanup_prompt') {
+      onNavigate('cleanup');
     }
   };
 
@@ -205,6 +207,7 @@ function TodayItemCard({ item, onNavigate }: { item: TodayItemResponse; onNaviga
           : isOverdue ? tokens.colors.error
           : item.item_type === 'goal_nudge' ? tokens.colors.violet
           : item.item_type === 'journal_prompt' ? tokens.colors.accent
+          : item.item_type === 'cleanup_prompt' ? tokens.colors.warning
           : tokens.colors.border,
       }}
     >

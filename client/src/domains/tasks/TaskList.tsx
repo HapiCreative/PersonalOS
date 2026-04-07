@@ -7,7 +7,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import { tokens } from '../../styles/tokens';
 import { tasksApi } from '../../api/endpoints';
+import { StaleIndicator } from '../../components/common/StaleIndicator';
 import type { TaskResponse, TaskStatus, TaskPriority } from '../../types';
+
+// Phase 6: Stale thresholds from Section 4.6, Table 31
+const TASK_STALE_DAYS: Record<string, number> = {
+  todo: 14,
+  in_progress: 7,
+};
+
+function getTaskDaysStale(task: TaskResponse): number | null {
+  const threshold = TASK_STALE_DAYS[task.status];
+  if (!threshold) return null;
+  const daysSinceUpdate = Math.floor(
+    (Date.now() - new Date(task.updated_at).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  return daysSinceUpdate >= threshold ? daysSinceUpdate : null;
+}
 
 const STATUS_TABS: { label: string; value: TaskStatus | 'all' }[] = [
   { label: 'All', value: 'all' },
@@ -94,6 +110,11 @@ export function TaskList({ selectedId, onSelect, refreshKey }: TaskListProps) {
                 background: PRIORITY_COLORS[item.priority],
               }} />
               <span style={styles.itemTitle}>{item.title}</span>
+              {/* Phase 6: Stale indicator */}
+              {(() => {
+                const daysStale = getTaskDaysStale(item);
+                return daysStale ? <StaleIndicator daysStale={daysStale} /> : null;
+              })()}
               {item.is_recurring && <span style={styles.recurringBadge}>↻</span>}
             </div>
             <div style={styles.itemMeta}>

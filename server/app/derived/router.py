@@ -37,6 +37,8 @@ from server.app.derived.context_layer import (
     assemble_context_layer,
     ContextItem,
 )
+from server.app.derived.stale_detection import check_node_stale
+from server.app.derived.schemas import DerivedExplanation
 
 router = APIRouter(prefix="/api/derived", tags=["derived"])
 
@@ -370,6 +372,52 @@ async def retrieve_by_mode(
             for r in results
         ],
         total=len(results),
+    )
+
+
+# =============================================================================
+# Context Layer endpoints
+# =============================================================================
+
+# =============================================================================
+# Stale Detection endpoints (Phase 6)
+# =============================================================================
+
+class StaleCheckResponse(BaseModel):
+    """
+    Stale detection result for a single node.
+    Invariant D-01: Includes DerivedExplanation.
+    """
+    is_stale: bool
+    node_id: str
+    stale_category: str | None = None
+    days_stale: int | None = None
+    prompt: str | None = None
+    explanation: dict | None = None  # DerivedExplanation as dict
+
+
+@router.get("/stale/{node_id}", response_model=StaleCheckResponse)
+async def check_stale(
+    node_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Check if a specific node is stale.
+    Layer: Derived (computed from Core data).
+    Invariant D-01: Result includes DerivedExplanation when stale.
+    Invariant D-02: Fully recomputable.
+    """
+    item = await check_node_stale(db, user.id, node_id)
+    if item is None:
+        return StaleCheckResponse(is_stale=False, node_id=str(node_id))
+    return StaleCheckResponse(
+        is_stale=True,
+        node_id=str(node_id),
+        stale_category=item.stale_category,
+        days_stale=item.days_stale,
+        prompt=item.prompt,
+        explanation=item.explanation.to_dict(),
     )
 
 

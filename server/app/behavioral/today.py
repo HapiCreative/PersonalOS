@@ -31,6 +31,8 @@ from server.app.core.models.enums import (
     NodeType, TaskStatus, TaskPriority, GoalStatus,
     EdgeRelationType, EdgeState,
 )
+from server.app.derived.stale_detection import detect_all_stale
+from server.app.temporal.snooze_records import get_snoozed_node_ids
 
 
 # =============================================================================
@@ -198,6 +200,42 @@ async def _get_journal_prompt(
     return []
 
 
+async def _get_cleanup_prompts(
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+) -> list[TodayItem]:
+    """
+    Get cleanup prompts for Today View (Phase 6).
+    Shows a summary of stale items needing attention.
+    Invariant U-05: Cleanup only if no active focus session (checked in suppression).
+    """
+    all_stale = await detect_all_stale(db, owner_id)
+    # Filter out snoozed items (visibility precedence: archived > snoozed > stale)
+    snoozed_ids = await get_snoozed_node_ids(db)
+    visible_stale = [item for item in all_stale if item.node_id not in snoozed_ids]
+
+    if not visible_stale:
+        return []
+
+    # Group by category for summary
+    by_category: dict[str, int] = {}
+    for item in visible_stale:
+        by_category[item.stale_category] = by_category.get(item.stale_category, 0) + 1
+
+    summary_parts = []
+    for cat, count in sorted(by_category.items()):
+        summary_parts.append(f"{count} {cat.replace('_', ' ')}")
+
+    return [TodayItem(
+        section="review",
+        item_type="cleanup_prompt",
+        title=f"{len(visible_stale)} items need cleanup",
+        subtitle=", ".join(summary_parts[:3]),
+        is_unsolicited=True,
+        metadata={"total_stale": len(visible_stale), "categories": by_category},
+    )]
+
+
 async def _get_in_progress_tasks(
     db: AsyncSession,
     owner_id: uuid.UUID,
@@ -321,14 +359,17 @@ async def assemble_today_view(
     due_items = await _get_due_overdue_tasks(db, owner_id, today)
     goal_nudges = await _get_goal_nudges(db, owner_id)
     journal_prompt = await _get_journal_prompt(db, owner_id, today)
+    # Phase 6: Cleanup prompts (Section 5.6)
+    cleanup_prompts = await _get_cleanup_prompts(db, owner_id)
 
     # Build sections dict
     sections: dict[str, list[TodayItem]] = {
         "focus": focus_items,
         "due": due_items,
         "goal_nudges": goal_nudges,
+        "review": cleanup_prompts,  # Phase 6: cleanup prompts in review section
         "journal": journal_prompt,
-        # Future phases will add: habits, learning, review, resurfaced, cleanup
+        # Future phases will add: habits, learning, resurfaced
     }
 
     # Apply ranking and caps
