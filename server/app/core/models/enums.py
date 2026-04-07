@@ -54,3 +54,45 @@ class InboxItemStatus(str, enum.Enum):
     DISMISSED = "dismissed"
     MERGED = "merged"
     ARCHIVED = "archived"
+
+
+class TaskStatus(str, enum.Enum):
+    """Section 2.4: Task status lifecycle.
+    Invariant B-03: Formal transition validation.
+    Invariant S-02: recurring + done = invalid.
+    """
+    TODO = "todo"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    CANCELLED = "cancelled"
+
+
+class TaskPriority(str, enum.Enum):
+    """Section 2.4: Task priority levels."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
+class Mood(str, enum.Enum):
+    """Section 2.4: Journal mood ENUM (v6 change from free TEXT)."""
+    GREAT = "great"
+    GOOD = "good"
+    NEUTRAL = "neutral"
+    LOW = "low"
+    BAD = "bad"
+
+
+class TaskExecutionEventType(str, enum.Enum):
+    """Section 3.7: Execution event types."""
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
+    DEFERRED = "deferred"
+
+
+class TemplateTargetType(str, enum.Enum):
+    """Section 2.4: Template target types."""
+    GOAL = "goal"
+    TASK = "task"
+    JOURNAL_ENTRY = "journal_entry"

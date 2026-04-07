@@ -7,12 +7,14 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ForeignKey, Text, Index
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Integer, Text, Index
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from server.app.core.db.database import Base
-from server.app.core.models.enums import NodeType, InboxItemStatus
+from server.app.core.models.enums import (
+    NodeType, InboxItemStatus, TaskStatus, TaskPriority, Mood,
+)
 
 
 class Node(Base):
@@ -67,4 +69,67 @@ class InboxItem(Base):
 
     __table_args__ = (
         Index("idx_inbox_items_status", "status"),
+    )
+
+
+class TaskNode(Base):
+    """
+    Section 2.4: task_nodes companion table.
+    Invariant S-02: recurring + done = invalid (CHECK constraint).
+    """
+    __tablename__ = "task_nodes"
+
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    status: Mapped[TaskStatus] = mapped_column(nullable=False, default=TaskStatus.TODO)
+    priority: Mapped[TaskPriority] = mapped_column(nullable=False, default=TaskPriority.MEDIUM)
+    due_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    recurrence: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Invariant S-01: CACHED DERIVED - convenience flag derived from recurrence IS NOT NULL
+    is_recurring: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False,
+        comment="CACHED DERIVED: Convenience flag, derived from recurrence IS NOT NULL. Invariant S-01."
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "NOT (recurrence IS NOT NULL AND status = 'done')",
+            name="task_recurring_done_invalid",
+        ),
+        Index("idx_task_nodes_status_due", "status", "due_date"),
+        Index("idx_task_nodes_priority", "priority"),
+    )
+
+
+class JournalNode(Base):
+    """
+    Section 2.4: journal_nodes companion table.
+    v6 change: mood changed from free TEXT to ENUM.
+    """
+    __tablename__ = "journal_nodes"
+
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    entry_date: Mapped[datetime] = mapped_column(Date, nullable=False)
+    mood: Mapped[Mood | None] = mapped_column(nullable=True)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+
+    # Invariant S-01: CACHED DERIVED - computed from content length
+    word_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0,
+        comment="CACHED DERIVED: Computed from content length. Invariant S-01."
+    )
+
+    __table_args__ = (
+        Index("idx_journal_nodes_entry_date", "entry_date"),
+        Index("idx_journal_nodes_mood", "mood"),
     )
