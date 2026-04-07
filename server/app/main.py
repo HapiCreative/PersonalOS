@@ -20,12 +20,14 @@ from server.app.domains.kb.router import router as kb_router
 from server.app.domains.memory.router import router as memory_router
 from server.app.domains.goals.router import router as goals_router
 from server.app.behavioral.router import router as today_router
+from server.app.behavioral.cleanup_router import router as cleanup_router
 from server.app.derived.router import router as derived_router
+from server.app.temporal.snooze_router import router as snooze_router
 
 app = FastAPI(
     title="Personal OS",
     description="A behavior system for your life",
-    version="0.4.0",
+    version="0.6.0",
 )
 
 # CORS
@@ -66,7 +68,11 @@ app.include_router(today_router)
 # Derived routers (Phase 5: Signal Scores, Progress, Retrieval, Context Layer)
 app.include_router(derived_router)
 
+# Phase 6: Cleanup system + Snooze records
+app.include_router(cleanup_router)
+app.include_router(snooze_router)
+
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "0.4.0"}
+    return {"status": "ok", "version": "0.6.0"}

@@ -500,3 +500,79 @@ export interface ContextLayerResponse {
   node_id: string;
   suppression_applied: boolean;
 }
+
+// =============================================================================
+// Phase 6: Stale Detection + Cleanup System + DerivedExplanation
+// =============================================================================
+
+// Section 4.11: DerivedExplanation schema type
+// Invariant D-01: Required for all user-facing Derived outputs
+export interface DerivedFactor {
+  signal: string;
+  value: unknown;
+  weight: number;
+}
+
+export interface DerivedExplanation {
+  summary: string;
+  factors: DerivedFactor[];
+  confidence?: number | null;
+  generated_at?: string | null;
+  version?: string | null;
+}
+
+// Stale item (Section 4.6)
+export interface StaleItemResponse {
+  node_id: string;
+  node_type: string;
+  title: string;
+  stale_category: string;
+  days_stale: number;
+  last_activity_at: string | null;
+  prompt: string;
+  explanation: DerivedExplanation; // Invariant D-01
+  snoozed_until: string | null;
+  metadata: Record<string, unknown>;
+}
+
+// Cleanup queue (Section 5.6)
+export interface CleanupQueueResponse {
+  items: StaleItemResponse[];
+  total_stale: number;
+  total_snoozed: number;
+  total_archived: number;
+  categories: Record<string, StaleItemResponse[]>;
+}
+
+// Cleanup action
+export type CleanupAction = 'archive' | 'snooze' | 'keep';
+
+export interface CleanupActionRequest {
+  action: CleanupAction;
+  node_ids: string[];
+  snoozed_until?: string;
+}
+
+export interface CleanupActionResponse {
+  action: string;
+  affected_node_ids: string[];
+  total_affected: number;
+}
+
+// Snooze record (Section 3.5)
+export interface SnoozeResponse {
+  id: string;
+  node_id: string;
+  snoozed_until: string;
+  created_at: string;
+}
+
+// Stale check result
+export interface StaleCheckResponse {
+  is_stale: boolean;
+  node_id: string;
+  stale_category?: string | null;
+  days_stale?: number | null;
+  prompt?: string | null;
+  explanation?: DerivedExplanation | null;
+}

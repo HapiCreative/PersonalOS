@@ -13,6 +13,7 @@ import { KBModule } from './domains/kb/KBModule';
 import { MemoryModule } from './domains/memory/MemoryModule';
 import { GoalsModule } from './domains/goals/GoalsModule';
 import { TodayView } from './domains/today/TodayView';
+import { CleanupModule } from './domains/cleanup/CleanupModule';
 import { PlaceholderModule } from './components/common/PlaceholderModule';
 import type { NavModule } from './components/layout/Rail';
 
@@ -66,6 +67,8 @@ function AppContent() {
               return <SourcesModule />;
             case 'memory':
               return <MemoryModule />;
+            case 'cleanup':
+              return <CleanupModule onNavigate={(m) => onNavigate(m as NavModule)} />;
             case 'templates':
               return <TemplatesModule />;
             default:

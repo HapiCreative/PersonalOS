@@ -14,10 +14,11 @@ import {
   Brain,
   Search,
   Layout,
+  Trash2,
   LogOut,
 } from 'lucide-react';
 
-export type NavModule = 'today' | 'inbox' | 'tasks' | 'journal' | 'goals' | 'kb' | 'sources' | 'memory' | 'templates';
+export type NavModule = 'today' | 'inbox' | 'tasks' | 'journal' | 'goals' | 'kb' | 'sources' | 'memory' | 'templates' | 'cleanup';
 
 interface RailProps {
   active: NavModule;
@@ -34,6 +35,7 @@ const navItems: { id: NavModule; icon: typeof Inbox; label: string }[] = [
   { id: 'kb', icon: FileText, label: 'KB' },
   { id: 'sources', icon: Search, label: 'Sources' },
   { id: 'memory', icon: Brain, label: 'Memory' },
+  { id: 'cleanup', icon: Trash2, label: 'Cleanup' },
   { id: 'templates', icon: Layout, label: 'Templates' },
 ];
 

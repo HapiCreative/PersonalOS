@@ -12,7 +12,7 @@ Invariants:
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, ForeignKey, Index, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -62,4 +62,41 @@ class TaskExecutionEvent(Base):
         Index("idx_task_execution_events_task", "task_id"),
         Index("idx_task_execution_events_date", "expected_for_date"),
         Index("idx_task_execution_events_user", "user_id"),
+    )
+
+
+class SnoozeRecord(Base):
+    """
+    Section 3.5: snooze_records temporal table.
+    Deferred cleanup items — hidden from cleanup queues until snoozed_until.
+
+    Visibility precedence (Section 1.6): archived > snoozed > stale.
+
+    Invariant T-01: No temporal-to-temporal FKs (references Core nodes only).
+    Invariant T-04: Ownership alignment (validated at service layer via node ownership).
+    """
+    __tablename__ = "snooze_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="Snoozed entity (FK -> nodes)",
+    )
+    snoozed_until: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        comment="When to resurface the item in cleanup queues",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
+    __table_args__ = (
+        CheckConstraint("snoozed_until > created_at", name="snooze_future"),
+        Index("idx_snooze_records_node", "node_id"),
+        Index("idx_snooze_records_until", "snoozed_until"),
     )

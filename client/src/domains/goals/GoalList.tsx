@@ -6,7 +6,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { tokens } from '../../styles/tokens';
 import { goalsApi } from '../../api/endpoints';
+import { StaleIndicator } from '../../components/common/StaleIndicator';
 import type { GoalResponse, GoalStatus } from '../../types';
+
+// Phase 6: Stale threshold for active goals (Section 4.6, Table 31)
+const GOAL_STALE_DAYS = 30;
+
+function getGoalDaysStale(goal: GoalResponse): number | null {
+  if (goal.status !== 'active') return null;
+  const daysSinceUpdate = Math.floor(
+    (Date.now() - new Date(goal.updated_at).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  return daysSinceUpdate >= GOAL_STALE_DAYS ? daysSinceUpdate : null;
+}
 
 const STATUS_TABS: { label: string; value: GoalStatus | 'all' }[] = [
   { label: 'All', value: 'all' },
@@ -84,6 +96,11 @@ export function GoalList({ selectedId, onSelect, refreshKey }: GoalListProps) {
           >
             <div style={styles.itemTop}>
               <span style={styles.itemTitle}>{item.title}</span>
+              {/* Phase 6: Stale indicator */}
+              {(() => {
+                const daysStale = getGoalDaysStale(item);
+                return daysStale ? <StaleIndicator daysStale={daysStale} prompt="Pause or adjust?" /> : null;
+              })()}
             </div>
             <div style={styles.itemMeta}>
               <span style={{
