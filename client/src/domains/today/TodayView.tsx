@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { tokens } from '../../styles/tokens';
-import { todayApi } from '../../api/endpoints';
+import { todayApi, llmApi } from '../../api/endpoints';
 import type { TodayViewResponse, TodaySectionResponse, TodayItemResponse } from '../../types';
 import { MorningCommit } from './MorningCommit';
 import { FocusMode } from './FocusMode';
@@ -69,6 +69,7 @@ export function TodayView({ onNavigate }: TodayViewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subView, setSubView] = useState<SubView>('none');
+  const [briefing, setBriefing] = useState<string[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -85,6 +86,8 @@ export function TodayView({ onNavigate }: TodayViewProps) {
 
   useEffect(() => {
     fetchData();
+    // Phase 9: Fetch AI briefing (3-5 bullets within attention budget)
+    llmApi.briefing().then((res) => setBriefing(res.bullets)).catch(() => setBriefing([]));
   }, [fetchData]);
 
   // Phase 7: Render sub-views
@@ -199,6 +202,18 @@ export function TodayView({ onNavigate }: TodayViewProps) {
               </button>
             )}
           </div>
+
+          {/* Phase 9: AI Briefing (3-5 bullets within attention budget) */}
+          {briefing.length > 0 && (
+            <div style={styles.briefingContainer}>
+              {briefing.map((bullet, i) => (
+                <div key={i} style={styles.briefingBullet}>
+                  <span style={styles.briefingDot} />
+                  <span style={styles.briefingText}>{bullet}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div style={styles.itemCount}>
             {data.total_count} items today
@@ -414,6 +429,35 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: tokens.fonts.mono,
     fontSize: 12,
     color: tokens.colors.success,
+  },
+  briefingContainer: {
+    padding: '10px 14px',
+    background: `${tokens.colors.violet}08`,
+    border: `1px solid ${tokens.colors.violet}20`,
+    borderRadius: tokens.radius,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    marginBottom: 10,
+  },
+  briefingBullet: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  briefingDot: {
+    width: 5,
+    height: 5,
+    borderRadius: '50%',
+    background: tokens.colors.violet,
+    marginTop: 6,
+    flexShrink: 0,
+  },
+  briefingText: {
+    fontFamily: tokens.fonts.sans,
+    fontSize: 13,
+    color: tokens.colors.text,
+    lineHeight: 1.4,
   },
   itemCount: {
     fontFamily: tokens.fonts.mono,

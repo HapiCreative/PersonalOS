@@ -796,3 +796,149 @@ export interface MonthlySnapshotResponse {
   notes: string | null;
   created_at: string;
 }
+
+// =============================================================================
+// Phase 9: AI Modes + LLM Pipeline + Enrichments
+// =============================================================================
+
+// Pipeline job types (Section 7.3)
+export type PipelineJobType =
+  | 'compile'
+  | 'lint'
+  | 'embed'
+  | 'suggest_links'
+  | 'normalize_source'
+  | 'enrich_source'
+  | 'classify_inbox';
+
+export type PipelineJobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+// Enrichment types (Section 4.8)
+export type EnrichmentType = 'summary' | 'takeaways' | 'entities';
+export type EnrichmentStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+// AI modes (Section 5.5)
+export type AIMode = 'ask' | 'plan' | 'reflect' | 'improve';
+
+// Pipeline job response
+export interface PipelineJobResponse {
+  id: string;
+  user_id: string;
+  target_node_id: string | null;
+  job_type: PipelineJobType;
+  status: PipelineJobStatus;
+  idempotency_key: string | null;
+  prompt_version: string | null;
+  model_version: string | null;
+  input_data: Record<string, unknown>;
+  output_data: Record<string, unknown>;
+  error_message: string | null;
+  retry_count: number;
+  max_retries: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface PipelineJobListResponse {
+  items: PipelineJobResponse[];
+  total: number;
+}
+
+// Node enrichment response (Section 4.8)
+// Invariant S-05: One active enrichment per type
+export interface EnrichmentResponse {
+  id: string;
+  node_id: string;
+  enrichment_type: EnrichmentType;
+  payload: Record<string, unknown>;
+  status: EnrichmentStatus;
+  prompt_version: string | null;
+  model_version: string | null;
+  superseded_at: string | null;
+  created_at: string;
+  pipeline_job_id: string | null;
+}
+
+export interface EnrichmentListResponse {
+  items: EnrichmentResponse[];
+  total: number;
+}
+
+// AI Mode responses (Section 5.5)
+export interface AICitationResponse {
+  node_id: string;
+  title: string;
+  node_type: string;
+}
+
+export interface AIContextItemResponse {
+  node_id: string;
+  node_type: string;
+  title: string;
+  summary: string | null;
+  combined_score: number;
+}
+
+export interface AIModeResponse {
+  mode: AIMode;
+  query: string;
+  response_text: string;
+  response_data: Record<string, unknown>;
+  citations: AICitationResponse[];
+  context_items: AIContextItemResponse[];
+  duration_ms: number;
+  model_version: string;
+  prompt_version: string;
+}
+
+// Link suggestion response
+export interface LinkSuggestionResponse {
+  edge_id: string;
+  source_id: string;
+  target_id: string;
+  relation_type: EdgeRelationType;
+  confidence: number | null;
+  rationale: string;
+}
+
+export interface SuggestLinksResponse {
+  node_id: string;
+  suggestions: LinkSuggestionResponse[];
+  total: number;
+}
+
+// Source enrichment response
+export interface EnrichSourceResponse {
+  node_id: string;
+  status: string;
+  enrichments: Record<string, string>;
+  error: string | null;
+}
+
+// KB lint response
+export interface LintKBResponse {
+  node_id: string;
+  quality_score: number | null;
+  is_stale: boolean | null;
+  issues: string[];
+  suggestions: string[];
+  error: string | null;
+}
+
+// Inbox classification response
+export interface ClassifyInboxResponse {
+  node_id: string;
+  classification: string | null;
+  title: string | null;
+  priority: string | null;
+  memory_type: string | null;
+  confidence: number | null;
+  rationale: string | null;
+  error: string | null;
+}
+
+// AI briefing response
+export interface BriefingResponse {
+  bullets: string[];
+}

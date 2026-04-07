@@ -27,6 +27,9 @@ from server.app.temporal.daily_plans_router import router as daily_plans_router
 from server.app.temporal.focus_sessions_router import router as focus_sessions_router
 from server.app.domains.projects.router import router as projects_router
 from server.app.behavioral.review_router import router as review_router
+from server.app.behavioral.llm_router import router as llm_router
+from server.app.derived.enrichments_router import router as enrichments_router
+from server.app.core.services.pipeline_router import router as pipeline_jobs_router
 
 app = FastAPI(
     title="Personal OS",
@@ -85,6 +88,12 @@ app.include_router(projects_router)
 app.include_router(review_router)
 
 
+# Phase 9: AI Modes + LLM Pipeline + Enrichments
+app.include_router(llm_router)
+app.include_router(enrichments_router)
+app.include_router(pipeline_jobs_router)
+
+
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "0.8.0"}
+    return {"status": "ok", "version": "0.9.0"}

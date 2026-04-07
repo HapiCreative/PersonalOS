@@ -200,3 +200,51 @@ class ProjectStatus(str, enum.Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
     ARCHIVED = "archived"
+
+
+# =============================================================================
+# Phase 9: AI Pipeline + Enrichments enums
+# =============================================================================
+
+
+class PipelineJobType(str, enum.Enum):
+    """Section 7.3: Pipeline job types for LLM operations."""
+    COMPILE = "compile"
+    LINT = "lint"
+    EMBED = "embed"
+    SUGGEST_LINKS = "suggest_links"
+    NORMALIZE_SOURCE = "normalize_source"
+    ENRICH_SOURCE = "enrich_source"
+    CLASSIFY_INBOX = "classify_inbox"
+
+
+class PipelineJobStatus(str, enum.Enum):
+    """Section 7.3: Pipeline job lifecycle status."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class EnrichmentType(str, enum.Enum):
+    """Section 4.8: Node enrichment types."""
+    SUMMARY = "summary"
+    TAKEAWAYS = "takeaways"
+    ENTITIES = "entities"
+
+
+class EnrichmentStatus(str, enum.Enum):
+    """Section 4.8: Enrichment processing status."""
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AIMode(str, enum.Enum):
+    """Section 5.5: AI interaction modes."""
+    ASK = "ask"
+    PLAN = "plan"
+    REFLECT = "reflect"
+    IMPROVE = "improve"

@@ -18,9 +18,10 @@ import {
   LogOut,
   FolderKanban,
   ClipboardList,
+  Sparkles,
 } from 'lucide-react';
 
-export type NavModule = 'today' | 'inbox' | 'tasks' | 'journal' | 'goals' | 'projects' | 'kb' | 'sources' | 'memory' | 'review' | 'templates' | 'cleanup';
+export type NavModule = 'today' | 'inbox' | 'tasks' | 'journal' | 'goals' | 'projects' | 'kb' | 'sources' | 'memory' | 'review' | 'templates' | 'cleanup' | 'ai';
 
 interface RailProps {
   active: NavModule;
@@ -38,6 +39,7 @@ const navItems: { id: NavModule; icon: typeof Inbox; label: string }[] = [
   { id: 'kb', icon: FileText, label: 'KB' },
   { id: 'sources', icon: Search, label: 'Sources' },
   { id: 'memory', icon: Brain, label: 'Memory' },
+  { id: 'ai', icon: Sparkles, label: 'AI' },
   { id: 'review', icon: ClipboardList, label: 'Review' },
   { id: 'cleanup', icon: Trash2, label: 'Cleanup' },
   { id: 'templates', icon: Layout, label: 'Templates' },

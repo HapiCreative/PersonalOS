@@ -16,6 +16,7 @@ from server.app.core.models.enums import (
     NodeType, InboxItemStatus, TaskStatus, TaskPriority, Mood,
     SourceType, ProcessingStatus, TriageStatus, Permanence, FragmentType,
     CompileStatus, PipelineStage, MemoryType, GoalStatus, ProjectStatus,
+    PipelineJobType, PipelineJobStatus, EnrichmentType, EnrichmentStatus, AIMode,
 )
 
 
@@ -368,4 +369,142 @@ class ProjectNode(Base):
 
     __table_args__ = (
         Index("idx_project_nodes_status", "status"),
+    )
+
+
+# =============================================================================
+# Phase 9: Pipeline Jobs + Node Enrichments + AI Interaction Logs
+# =============================================================================
+
+
+class PipelineJob(Base):
+    """
+    Section 7.3: LLM pipeline job tracking.
+    Invariant B-04: Pipeline jobs inherit ownership from their target node.
+    Retention: 30-day cleanup for completed/failed.
+    """
+    __tablename__ = "pipeline_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    target_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    job_type: Mapped[PipelineJobType] = mapped_column(nullable=False)
+    status: Mapped[PipelineJobStatus] = mapped_column(
+        nullable=False, default=PipelineJobStatus.PENDING
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    input_data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    output_data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_pipeline_jobs_status", "status"),
+        Index("idx_pipeline_jobs_type", "job_type"),
+        Index("idx_pipeline_jobs_user", "user_id"),
+        Index("idx_pipeline_jobs_target", "target_node_id", postgresql_where="target_node_id IS NOT NULL"),
+        Index("idx_pipeline_jobs_created", "created_at"),
+    )
+
+
+class NodeEnrichment(Base):
+    """
+    Section 4.8: Versioned AI enrichments.
+    Invariant S-05: One active enrichment per type.
+    Only one row per node_id + enrichment_type where superseded_at IS NULL + status=completed.
+    Re-enrichment: insert new, supersede old.
+    Rollback: supersede current, insert restored copy.
+    Retention: 180+ days for superseded enrichments.
+    """
+    __tablename__ = "node_enrichments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    enrichment_type: Mapped[EnrichmentType] = mapped_column(nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[EnrichmentStatus] = mapped_column(
+        nullable=False, default=EnrichmentStatus.PENDING
+    )
+    prompt_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="NULL = current version. Non-NULL = replaced by newer enrichment. Retention: 180+ days minimum."
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+    )
+    pipeline_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pipeline_jobs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        # Invariant S-05: Only one active (non-superseded, completed) enrichment per node+type
+        Index(
+            "idx_node_enrichments_active",
+            "node_id", "enrichment_type",
+            unique=True,
+            postgresql_where="superseded_at IS NULL AND status = 'completed'",
+        ),
+        Index("idx_node_enrichments_node", "node_id"),
+        Index("idx_node_enrichments_type", "enrichment_type"),
+        Index("idx_node_enrichments_status", "status"),
+    )
+
+
+class AIInteractionLog(Base):
+    """
+    Section 3.6: Temporal table for AI mode interaction history.
+    Invariant T-01: No temporal-to-temporal FKs.
+    Invariant T-04: user_id must match owner_id of referenced nodes.
+    Invariant T-03: Records retained indefinitely, node_deleted flag on hard-delete.
+    """
+    __tablename__ = "ai_interaction_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mode: Mapped[AIMode] = mapped_column(nullable=False)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    response_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response_data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    context_node_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), default=list
+    )
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+    )
+    # Invariant T-03: Temporal retention — never auto-deleted
+    node_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        Index("idx_ai_interaction_logs_user", "user_id"),
+        Index("idx_ai_interaction_logs_mode", "mode"),
+        Index("idx_ai_interaction_logs_created", "created_at"),
     )
