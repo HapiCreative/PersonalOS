@@ -323,6 +323,27 @@ async def execute_improve(
     )
 
 
+_MODE_EXECUTORS = {
+    AIMode.ASK: execute_ask,
+    AIMode.PLAN: execute_plan,
+    AIMode.REFLECT: execute_reflect,
+    AIMode.IMPROVE: execute_improve,
+}
+
+
+async def execute_mode(
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+    mode: AIMode,
+    query: str,
+) -> AIModeResult:
+    """Single dispatch for all AI modes."""
+    executor = _MODE_EXECUTORS.get(mode)
+    if executor is None:
+        raise ValueError(f"Unknown AI mode: {mode}")
+    return await executor(db, owner_id, query)
+
+
 async def generate_briefing(
     db: AsyncSession,
     owner_id: uuid.UUID,

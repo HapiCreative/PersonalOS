@@ -1,12 +1,9 @@
 """
 LLM / AI Modes router (Section 8.3 — Behavioral Layer).
-Endpoints for the four AI modes + link suggestions + background AI jobs.
+Single AI mode endpoint with mode parameter + background AI job endpoints.
 
 API endpoints:
-- POST /api/llm/ask
-- POST /api/llm/plan
-- POST /api/llm/reflect
-- POST /api/llm/improve
+- POST /api/llm/query          (mode in body: ask|plan|reflect|improve)
 - POST /api/llm/suggest-links/{node_id}
 - POST /api/llm/enrich-source/{node_id}
 - POST /api/llm/lint-kb/{node_id}
@@ -23,10 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.app.core.auth.dependencies import get_current_user
 from server.app.core.db.database import get_db
 from server.app.core.models.user import User
-from server.app.behavioral.ai_modes import (
-    execute_ask, execute_plan, execute_reflect, execute_improve,
-    generate_briefing,
-)
+from server.app.core.models.enums import AIMode
+from server.app.behavioral.ai_modes import execute_mode, generate_briefing
 from server.app.behavioral.link_suggestions import suggest_links_for_node
 from server.app.behavioral.background_ai import (
     enrich_source, lint_kb_entry, classify_inbox_item,
@@ -40,6 +35,7 @@ router = APIRouter(prefix="/api/llm", tags=["llm"])
 # =============================================================================
 
 class AIQueryRequest(BaseModel):
+    mode: AIMode
     query: str = Field(..., min_length=1, max_length=5000)
 
 
@@ -116,28 +112,17 @@ class BriefingResponse(BaseModel):
 
 
 # =============================================================================
-# AI Mode endpoints (Section 5.5)
+# Single AI Mode endpoint (Section 5.5)
 # =============================================================================
 
-@router.post("/ask", response_model=AIModeResponse, status_code=200)
-async def ask_mode(
-    request: AIQueryRequest,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Ask mode: factual_qa retrieval -> answer + citations -> ai_interaction_logs.
-    Section 5.5: Factual Q&A with citations.
-    """
-    result = await execute_ask(db, user.id, request.query)
+def _build_response(result) -> AIModeResponse:
+    """Build AIModeResponse from an AIModeResult."""
     return AIModeResponse(
         mode=result.mode,
         query=result.query,
         response_text=result.response_text,
         response_data=result.response_data,
-        citations=[
-            CitationResponse(**c) for c in result.citations
-        ],
+        citations=[CitationResponse(**c) for c in result.citations],
         context_items=[
             ContextItemResponse(
                 node_id=str(item.node_id),
@@ -154,100 +139,18 @@ async def ask_mode(
     )
 
 
-@router.post("/plan", response_model=AIModeResponse, status_code=200)
-async def plan_mode(
+@router.post("/query", response_model=AIModeResponse, status_code=200)
+async def query_ai(
     request: AIQueryRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Plan mode: execution_qa retrieval -> suggested milestones/tasks.
-    Section 5.5: Promotes to Core on user accept.
+    Single AI mode endpoint. Pass mode (ask|plan|reflect|improve) in the body.
+    Section 5.5: Dispatches to the appropriate retrieval + LLM pipeline.
     """
-    result = await execute_plan(db, user.id, request.query)
-    return AIModeResponse(
-        mode=result.mode,
-        query=result.query,
-        response_text=result.response_text,
-        response_data=result.response_data,
-        context_items=[
-            ContextItemResponse(
-                node_id=str(item.node_id),
-                node_type=item.node_type,
-                title=item.title,
-                summary=item.summary,
-                combined_score=item.combined_score,
-            )
-            for item in result.context.items
-        ],
-        duration_ms=result.duration_ms,
-        model_version=result.model_version,
-        prompt_version=result.prompt_version,
-    )
-
-
-@router.post("/reflect", response_model=AIModeResponse, status_code=200)
-async def reflect_mode(
-    request: AIQueryRequest,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Reflect mode: reflection retrieval -> narrative + patterns -> derived (promotable).
-    Section 5.5: Output is Derived, user can promote to Core note/KB entry.
-    """
-    result = await execute_reflect(db, user.id, request.query)
-    return AIModeResponse(
-        mode=result.mode,
-        query=result.query,
-        response_text=result.response_text,
-        response_data=result.response_data,
-        context_items=[
-            ContextItemResponse(
-                node_id=str(item.node_id),
-                node_type=item.node_type,
-                title=item.title,
-                summary=item.summary,
-                combined_score=item.combined_score,
-            )
-            for item in result.context.items
-        ],
-        duration_ms=result.duration_ms,
-        model_version=result.model_version,
-        prompt_version=result.prompt_version,
-    )
-
-
-@router.post("/improve", response_model=AIModeResponse, status_code=200)
-async def improve_mode(
-    request: AIQueryRequest,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Improve mode: improvement retrieval -> prioritized recommendations.
-    Section 5.5: Surfaces stale, blocked, and inefficient items.
-    """
-    result = await execute_improve(db, user.id, request.query)
-    return AIModeResponse(
-        mode=result.mode,
-        query=result.query,
-        response_text=result.response_text,
-        response_data=result.response_data,
-        context_items=[
-            ContextItemResponse(
-                node_id=str(item.node_id),
-                node_type=item.node_type,
-                title=item.title,
-                summary=item.summary,
-                combined_score=item.combined_score,
-            )
-            for item in result.context.items
-        ],
-        duration_ms=result.duration_ms,
-        model_version=result.model_version,
-        prompt_version=result.prompt_version,
-    )
+    result = await execute_mode(db, user.id, request.mode, request.query)
+    return _build_response(result)
 
 
 # =============================================================================

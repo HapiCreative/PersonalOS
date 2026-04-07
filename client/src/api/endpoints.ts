@@ -637,14 +637,8 @@ export const monthlyReviewApi = {
 
 // AI Modes (Section 5.5 — Behavioral)
 export const llmApi = {
-  ask: (query: string) =>
-    api.post<AIModeResponse>('/llm/ask', { query }),
-  plan: (query: string) =>
-    api.post<AIModeResponse>('/llm/plan', { query }),
-  reflect: (query: string) =>
-    api.post<AIModeResponse>('/llm/reflect', { query }),
-  improve: (query: string) =>
-    api.post<AIModeResponse>('/llm/improve', { query }),
+  query: (mode: AIMode, query: string) =>
+    api.post<AIModeResponse>('/llm/query', { mode, query }),
   suggestLinks: (nodeId: string) =>
     api.post<SuggestLinksResponse>(`/llm/suggest-links/${nodeId}`),
   enrichSource: (nodeId: string) =>
