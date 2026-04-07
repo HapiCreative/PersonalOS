@@ -681,3 +681,118 @@ export interface ReflectionSubmitResponse {
   plan_closed: boolean;
   errors: string[];
 }
+
+// =============================================================================
+// Phase 8: Projects + Weekly/Monthly Reviews
+// =============================================================================
+
+// Project status (Section 2.4)
+export type ProjectStatus = 'active' | 'completed' | 'archived';
+
+// Project response
+export interface ProjectResponse {
+  node_id: string;
+  title: string;
+  summary: string | null;
+  status: ProjectStatus;
+  description: string | null;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface ProjectListResponse {
+  items: ProjectResponse[];
+  total: number;
+}
+
+export interface ProjectLinkedItemResponse {
+  node_id: string;
+  title: string;
+  node_type: string; // 'goal' or 'task'
+  status: string;
+  edge_id: string;
+  edge_weight: number;
+}
+
+export interface ProjectWithLinksResponse extends ProjectResponse {
+  linked_items: ProjectLinkedItemResponse[];
+}
+
+// Weekly review (Section 5.5)
+export interface WeeklyTaskSummaryResponse {
+  node_id: string;
+  title: string;
+  status: string;
+  priority: string;
+  completed: boolean;
+  was_planned: boolean;
+}
+
+export interface WeeklyGoalSummaryResponse {
+  node_id: string;
+  title: string;
+  status: string;
+  progress: number;
+  linked_task_count: number;
+  completed_task_count: number;
+}
+
+export interface WeeklyReviewSummaryResponse {
+  week_start: string;
+  week_end: string;
+  completed_tasks: WeeklyTaskSummaryResponse[];
+  planned_tasks: WeeklyTaskSummaryResponse[];
+  stalled_goals: WeeklyGoalSummaryResponse[];
+  active_goals: WeeklyGoalSummaryResponse[];
+  total_planned: number;
+  total_completed: number;
+  completion_rate: number;
+  total_focus_time_seconds: number;
+  existing_snapshot: Record<string, unknown> | null;
+}
+
+export interface WeeklySnapshotResponse {
+  id: string;
+  week_start_date: string;
+  week_end_date: string;
+  focus_areas: string[];
+  priority_task_ids: string[];
+  notes: string | null;
+  created_at: string;
+}
+
+// Monthly review (Section 5.5)
+export interface MonthlyGoalSummaryResponse {
+  node_id: string;
+  title: string;
+  status: string;
+  progress: number;
+  tasks_completed_this_month: number;
+}
+
+export interface WeeklySnapshotBriefResponse {
+  week_start: string;
+  week_end: string;
+  focus_areas: string[];
+  notes: string | null;
+}
+
+export interface MonthlyReviewSummaryResponse {
+  month: string;
+  month_name: string;
+  weekly_snapshots: WeeklySnapshotBriefResponse[];
+  goals: MonthlyGoalSummaryResponse[];
+  total_tasks_completed: number;
+  total_focus_time_seconds: number;
+  existing_snapshot: Record<string, unknown> | null;
+}
+
+export interface MonthlySnapshotResponse {
+  id: string;
+  month: string;
+  focus_areas: string[];
+  notes: string | null;
+  created_at: string;
+}

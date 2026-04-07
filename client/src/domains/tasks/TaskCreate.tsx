@@ -4,8 +4,8 @@
 
 import { useState, useEffect } from 'react';
 import { tokens } from '../../styles/tokens';
-import { tasksApi, templatesApi } from '../../api/endpoints';
-import type { TaskPriority, TemplateResponse } from '../../types';
+import { tasksApi, templatesApi, projectsApi, edgesApi } from '../../api/endpoints';
+import type { TaskPriority, TemplateResponse, ProjectResponse } from '../../types';
 
 const PRIORITY_OPTIONS: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
 
@@ -23,11 +23,15 @@ export function TaskCreate({ onCreated, onCancel }: TaskCreateProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateResponse[]>([]);
+  // Phase 8: Project selector
+  const [projects, setProjects] = useState<ProjectResponse[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
 
   useEffect(() => {
     templatesApi.list({ target_type: 'task' }).then((res) => {
       setTemplates(res.items);
     }).catch(() => {});
+    projectsApi.list({ status: 'active' }).then((res) => setProjects(res.items)).catch(() => setProjects([]));
   }, []);
 
   const applyTemplate = (template: TemplateResponse) => {
@@ -43,13 +47,21 @@ export function TaskCreate({ onCreated, onCancel }: TaskCreateProps) {
     setSaving(true);
     setError(null);
     try {
-      await tasksApi.create({
+      const newTask = await tasksApi.create({
         title: title.trim(),
         priority,
         due_date: dueDate || undefined,
         recurrence: recurrence || undefined,
         notes: notes || undefined,
       });
+      // Phase 8: Assign to project via belongs_to edge (Invariant G-05)
+      if (selectedProjectId) {
+        await edgesApi.create({
+          source_id: newTask.node_id,
+          target_id: selectedProjectId,
+          relation_type: 'belongs_to',
+        });
+      }
       onCreated();
     } catch (e: any) {
       setError(e.message || 'Failed to create task');
@@ -109,6 +121,23 @@ export function TaskCreate({ onCreated, onCancel }: TaskCreateProps) {
           />
         </div>
       </div>
+
+      {/* Phase 8: Project selector */}
+      {projects.length > 0 && (
+        <div style={styles.field}>
+          <label style={styles.label}>Project</label>
+          <select
+            value={selectedProjectId}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
+            style={styles.select}
+          >
+            <option value="">None</option>
+            {projects.map((p) => (
+              <option key={p.node_id} value={p.node_id}>{p.title}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div style={styles.field}>
         <label style={styles.label}>Notes</label>

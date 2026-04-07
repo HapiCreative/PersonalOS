@@ -6,10 +6,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { tokens } from '../../styles/tokens';
-import { tasksApi, executionEventsApi } from '../../api/endpoints';
+import { tasksApi, executionEventsApi, projectsApi, edgesApi } from '../../api/endpoints';
 import { EdgeChips } from '../../components/edges/EdgeChips';
 import { BacklinksDisplay } from '../../components/edges/BacklinksDisplay';
-import type { TaskResponse, TaskStatus, TaskPriority, TaskExecutionEventResponse } from '../../types';
+import type { TaskResponse, TaskStatus, TaskPriority, TaskExecutionEventResponse, ProjectResponse } from '../../types';
 
 const PRIORITY_OPTIONS: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
 
@@ -44,6 +44,10 @@ export function TaskDetail({ task, onUpdated }: TaskDetailProps) {
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<TaskExecutionEventResponse[]>([]);
   const [showLogEvent, setShowLogEvent] = useState(false);
+  // Phase 8: Project selector
+  const [projects, setProjects] = useState<ProjectResponse[]>([]);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [assigningProject, setAssigningProject] = useState(false);
 
   useEffect(() => {
     setTitle(task.title);
@@ -57,6 +61,14 @@ export function TaskDetail({ task, onUpdated }: TaskDetailProps) {
     executionEventsApi.list({ task_id: task.node_id }).then((res) => {
       setEvents(res.items);
     }).catch(() => setEvents([]));
+    // Phase 8: Load projects and current assignment
+    projectsApi.list({ status: 'active' }).then((res) => setProjects(res.items)).catch(() => setProjects([]));
+    edgesApi.getForNode(task.node_id, { direction: 'outgoing', relation_type: 'belongs_to' })
+      .then((res) => {
+        const belongsTo = res.items.find((e) => e.relation_type === 'belongs_to');
+        setCurrentProjectId(belongsTo?.target_id ?? null);
+      })
+      .catch(() => setCurrentProjectId(null));
   }, [task]);
 
   const handleTransition = async (newStatus: TaskStatus) => {
@@ -101,6 +113,38 @@ export function TaskDetail({ task, onUpdated }: TaskDetailProps) {
       onUpdated();
     } catch (e: any) {
       setError(e.message || 'Failed to log event');
+    }
+  };
+
+  // Phase 8: Assign task to project via belongs_to edge (Invariant G-05)
+  const handleAssignProject = async (projectNodeId: string) => {
+    setAssigningProject(true);
+    setError(null);
+    try {
+      // Remove existing belongs_to edge if any
+      if (currentProjectId) {
+        const existing = await edgesApi.getForNode(task.node_id, { direction: 'outgoing', relation_type: 'belongs_to' });
+        for (const edge of existing.items) {
+          if (edge.relation_type === 'belongs_to') {
+            await edgesApi.delete(edge.id);
+          }
+        }
+      }
+      // Create new belongs_to edge if not "none"
+      if (projectNodeId !== '') {
+        await edgesApi.create({
+          source_id: task.node_id,
+          target_id: projectNodeId,
+          relation_type: 'belongs_to',
+        });
+        setCurrentProjectId(projectNodeId);
+      } else {
+        setCurrentProjectId(null);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to assign project');
+    } finally {
+      setAssigningProject(false);
     }
   };
 
@@ -202,6 +246,25 @@ export function TaskDetail({ task, onUpdated }: TaskDetailProps) {
           </>
         )}
       </div>
+
+      {/* Phase 8: Project selector - Invariant G-05 */}
+      {projects.length > 0 && (
+        <div style={styles.fieldRow}>
+          <span style={styles.fieldLabel}>Project:</span>
+          <select
+            value={currentProjectId || ''}
+            onChange={(e) => handleAssignProject(e.target.value)}
+            disabled={assigningProject}
+            style={styles.select}
+          >
+            <option value="">None</option>
+            {projects.map((p) => (
+              <option key={p.node_id} value={p.node_id}>{p.title}</option>
+            ))}
+          </select>
+          {assigningProject && <span style={styles.fieldLabel}>Saving...</span>}
+        </div>
+      )}
 
       {/* Notes */}
       <div style={styles.section}>

@@ -12,7 +12,9 @@ import { SourcesModule } from './domains/sources/SourcesModule';
 import { KBModule } from './domains/kb/KBModule';
 import { MemoryModule } from './domains/memory/MemoryModule';
 import { GoalsModule } from './domains/goals/GoalsModule';
+import { ProjectsModule } from './domains/projects/ProjectsModule';
 import { TodayView } from './domains/today/TodayView';
+import { ReviewModule } from './domains/review/ReviewModule';
 import { CleanupModule } from './domains/cleanup/CleanupModule';
 import { PlaceholderModule } from './components/common/PlaceholderModule';
 import type { NavModule } from './components/layout/Rail';
@@ -61,12 +63,16 @@ function AppContent() {
               return <JournalModule />;
             case 'goals':
               return <GoalsModule />;
+            case 'projects':
+              return <ProjectsModule />;
             case 'kb':
               return <KBModule />;
             case 'sources':
               return <SourcesModule />;
             case 'memory':
               return <MemoryModule />;
+            case 'review':
+              return <ReviewModule />;
             case 'cleanup':
               return <CleanupModule onNavigate={(m) => onNavigate(m as NavModule)} />;
             case 'templates':

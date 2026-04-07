@@ -15,7 +15,7 @@ from server.app.core.db.database import Base
 from server.app.core.models.enums import (
     NodeType, InboxItemStatus, TaskStatus, TaskPriority, Mood,
     SourceType, ProcessingStatus, TriageStatus, Permanence, FragmentType,
-    CompileStatus, PipelineStage, MemoryType, GoalStatus,
+    CompileStatus, PipelineStage, MemoryType, GoalStatus, ProjectStatus,
 )
 
 
@@ -341,4 +341,31 @@ class GoalNode(Base):
         ),
         Index("idx_goal_nodes_status", "status"),
         Index("idx_goal_nodes_end_date", "end_date", postgresql_where="end_date IS NOT NULL"),
+    )
+
+
+# =============================================================================
+# Phase 8: Project companion table
+# =============================================================================
+
+
+class ProjectNode(Base):
+    """
+    Section 2.4 (TABLE 19): project_nodes companion table.
+    Lightweight containers grouping goals and tasks via belongs_to edges.
+    Invariant G-05: belongs_to edges restricted to goal→project, task→project.
+    """
+    __tablename__ = "project_nodes"
+
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    status: Mapped[ProjectStatus] = mapped_column(nullable=False, default=ProjectStatus.ACTIVE)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+
+    __table_args__ = (
+        Index("idx_project_nodes_status", "status"),
     )

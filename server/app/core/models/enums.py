@@ -188,3 +188,15 @@ class GoalStatus(str, enum.Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
     ARCHIVED = "archived"
+
+
+# =============================================================================
+# Phase 8: Projects enums
+# =============================================================================
+
+
+class ProjectStatus(str, enum.Enum):
+    """Section 2.4: Project lifecycle status."""
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"
