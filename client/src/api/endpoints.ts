@@ -20,6 +20,16 @@ import type {
   TemplateListResponse,
   TaskExecutionEventResponse,
   TaskExecutionEventListResponse,
+  SourceResponse,
+  SourceListResponse,
+  SourcePromoteResponse,
+  FragmentResponse,
+  FragmentListResponse,
+  KBResponse,
+  KBListResponse,
+  KBCompileResponse,
+  MemoryResponse,
+  MemoryListResponse,
   NodeType,
   InboxItemStatus,
   EdgeRelationType,
@@ -30,6 +40,13 @@ import type {
   Mood,
   TaskExecutionEventType,
   TemplateTargetType,
+  SourceType,
+  ProcessingStatus,
+  TriageStatus,
+  Permanence,
+  CompileStatus,
+  PipelineStage,
+  MemoryType,
 } from '../types';
 
 // Auth
@@ -200,14 +217,134 @@ export const executionEventsApi = {
   }) => api.post<TaskExecutionEventResponse>('/task-execution-events', data),
 };
 
-// Search
+// Search (Phase 3: hybrid search with mode parameter)
 export const searchApi = {
-  search: (q: string, params?: { type?: string; limit?: number; offset?: number; include_archived?: boolean }) => {
+  search: (q: string, params?: { type?: string; mode?: string; limit?: number; offset?: number; include_archived?: boolean }) => {
     const query = new URLSearchParams({ q });
     if (params?.type) query.set('type', params.type);
+    if (params?.mode) query.set('mode', params.mode);
     if (params?.limit) query.set('limit', String(params.limit));
     if (params?.offset) query.set('offset', String(params.offset));
     if (params?.include_archived) query.set('include_archived', 'true');
     return api.get<SearchResponse>(`/search?${query}`);
   },
+};
+
+// Sources (Phase 3)
+export const sourcesApi = {
+  list: (params?: { processing_status?: ProcessingStatus; triage_status?: TriageStatus; source_type?: SourceType; include_archived?: boolean; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.processing_status) query.set('processing_status', params.processing_status);
+    if (params?.triage_status) query.set('triage_status', params.triage_status);
+    if (params?.source_type) query.set('source_type', params.source_type);
+    if (params?.include_archived) query.set('include_archived', 'true');
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<SourceListResponse>(`/sources?${query}`);
+  },
+  get: (nodeId: string) => api.get<SourceResponse>(`/sources/${nodeId}`),
+  create: (data: {
+    title: string;
+    summary?: string;
+    source_type?: SourceType;
+    url?: string;
+    author?: string;
+    platform?: string;
+    published_at?: string;
+    capture_context?: string;
+    raw_content?: string;
+    permanence?: Permanence;
+  }) => api.post<SourceResponse>('/sources', data),
+  update: (nodeId: string, data: {
+    title?: string;
+    summary?: string;
+    source_type?: SourceType;
+    url?: string;
+    author?: string;
+    platform?: string;
+    capture_context?: string;
+    raw_content?: string;
+    canonical_content?: string;
+    permanence?: Permanence;
+    processing_status?: ProcessingStatus;
+    triage_status?: TriageStatus;
+  }) => api.put<SourceResponse>(`/sources/${nodeId}`, data),
+  promote: (nodeId: string, data: {
+    target_type: string;
+    title?: string;
+    memory_type?: string;
+    priority?: string;
+  }) => api.post<SourcePromoteResponse>(`/sources/${nodeId}/promote`, data),
+  listFragments: (nodeId: string, params?: { limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<FragmentListResponse>(`/sources/${nodeId}/fragments?${query}`);
+  },
+  createFragment: (nodeId: string, data: {
+    fragment_text: string;
+    position?: number;
+    fragment_type?: string;
+    section_ref?: string;
+  }) => api.post<FragmentResponse>(`/sources/${nodeId}/fragments`, data),
+};
+
+// KB (Phase 3)
+export const kbApi = {
+  list: (params?: { compile_status?: CompileStatus; pipeline_stage?: PipelineStage; include_archived?: boolean; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.compile_status) query.set('compile_status', params.compile_status);
+    if (params?.pipeline_stage) query.set('pipeline_stage', params.pipeline_stage);
+    if (params?.include_archived) query.set('include_archived', 'true');
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<KBListResponse>(`/kb?${query}`);
+  },
+  get: (nodeId: string) => api.get<KBResponse>(`/kb/${nodeId}`),
+  create: (data: {
+    title: string;
+    summary?: string;
+    content?: string;
+    raw_content?: string;
+    tags?: string[];
+  }) => api.post<KBResponse>('/kb', data),
+  update: (nodeId: string, data: {
+    title?: string;
+    summary?: string;
+    content?: string;
+    raw_content?: string;
+    tags?: string[];
+  }) => api.put<KBResponse>(`/kb/${nodeId}`, data),
+  compile: (nodeId: string, action: string) =>
+    api.post<KBCompileResponse>(`/kb/${nodeId}/compile`, { action }),
+};
+
+// Memory (Phase 3)
+export const memoryApi = {
+  list: (params?: { memory_type?: MemoryType; include_archived?: boolean; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.memory_type) query.set('memory_type', params.memory_type);
+    if (params?.include_archived) query.set('include_archived', 'true');
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<MemoryListResponse>(`/memory?${query}`);
+  },
+  get: (nodeId: string) => api.get<MemoryResponse>(`/memory/${nodeId}`),
+  create: (data: {
+    title: string;
+    summary?: string;
+    memory_type: MemoryType;
+    content?: string;
+    context?: string;
+    review_at?: string;
+    tags?: string[];
+  }) => api.post<MemoryResponse>('/memory', data),
+  update: (nodeId: string, data: {
+    title?: string;
+    summary?: string;
+    content?: string;
+    context?: string;
+    review_at?: string | null;
+    tags?: string[];
+  }) => api.put<MemoryResponse>(`/memory/${nodeId}`, data),
 };
