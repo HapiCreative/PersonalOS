@@ -37,7 +37,7 @@ export function MemoryModule() {
           refreshKey={refreshKey}
         />
       </ListPane>
-      <DetailPane>
+      <DetailPane nodeId={selectedMemory?.node_id}>
         {creating ? (
           <MemoryCreate
             onCreated={handleUpdated}

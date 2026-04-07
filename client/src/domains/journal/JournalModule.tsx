@@ -36,7 +36,7 @@ export function JournalModule() {
           refreshKey={refreshKey}
         />
       </ListPane>
-      <DetailPane>
+      <DetailPane nodeId={selectedEntry?.node_id}>
         {creating ? (
           <JournalCreate onCreated={handleUpdated} onCancel={() => setCreating(false)} />
         ) : selectedEntry ? (

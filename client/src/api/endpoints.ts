@@ -35,6 +35,13 @@ import type {
   GoalWithTasksResponse,
   GoalStatus,
   TodayViewResponse,
+  SignalScoreResponse,
+  SignalScoreBatchResponse,
+  ProgressIntelligenceResponse,
+  ProgressBatchResponse,
+  RetrievalModeInfo,
+  RetrievalResponse,
+  ContextLayerResponse,
   NodeType,
   InboxItemStatus,
   EdgeRelationType,
@@ -362,6 +369,52 @@ export const goalsApi = {
 // Today View (Phase 4 - Behavioral)
 export const todayApi = {
   get: () => api.get<TodayViewResponse>('/today'),
+};
+
+// Derived Intelligence (Phase 5)
+export const derivedApi = {
+  // Signal Scores
+  getSignalScore: (nodeId: string) =>
+    api.get<SignalScoreResponse>(`/derived/signal-score/${nodeId}`),
+  computeSignalScore: (nodeId: string) =>
+    api.post<SignalScoreResponse>(`/derived/signal-score/${nodeId}/compute`),
+  computeSignalScoresBatch: (limit?: number) => {
+    const query = new URLSearchParams();
+    if (limit) query.set('limit', String(limit));
+    return api.post<SignalScoreBatchResponse>(`/derived/signal-score/compute-batch?${query}`);
+  },
+
+  // Progress Intelligence
+  getProgress: (nodeId: string) =>
+    api.get<ProgressIntelligenceResponse>(`/derived/progress/${nodeId}`),
+  computeProgress: (nodeId: string) =>
+    api.post<ProgressIntelligenceResponse>(`/derived/progress/${nodeId}/compute`),
+  computeProgressBatch: (params?: { node_type?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.node_type) query.set('node_type', params.node_type);
+    if (params?.limit) query.set('limit', String(params.limit));
+    return api.post<ProgressBatchResponse>(`/derived/progress/compute-batch?${query}`);
+  },
+
+  // Retrieval Modes
+  listRetrievalModes: () =>
+    api.get<RetrievalModeInfo[]>('/derived/retrieval-modes'),
+  retrieve: (mode: string, params?: { q?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.q) query.set('q', params.q);
+    if (params?.limit) query.set('limit', String(params.limit));
+    return api.get<RetrievalResponse>(`/derived/retrieve/${mode}?${query}`);
+  },
+
+  // Context Layer
+  getContextLayer: (nodeId: string) =>
+    api.get<ContextLayerResponse>(`/derived/context/${nodeId}`),
+};
+
+// Edge state update (Phase 5: for promoting suggested links)
+export const edgeStateApi = {
+  updateState: (edgeId: string, state: EdgeState) =>
+    api.patch<EdgeResponse>(`/edges/${edgeId}/state`, { state }),
 };
 
 // Memory (Phase 3)

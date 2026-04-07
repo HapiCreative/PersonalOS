@@ -28,7 +28,7 @@ export function InboxModule() {
           refreshKey={refreshKey}
         />
       </ListPane>
-      <DetailPane>
+      <DetailPane nodeId={selectedItem?.node_id}>
         {selectedItem ? (
           <InboxDetail item={selectedItem} onUpdated={handleUpdated} />
         ) : (
