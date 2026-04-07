@@ -8,6 +8,9 @@ import { InboxModule } from './domains/inbox/InboxModule';
 import { TasksModule } from './domains/tasks/TasksModule';
 import { JournalModule } from './domains/journal/JournalModule';
 import { TemplatesModule } from './domains/templates/TemplatesModule';
+import { SourcesModule } from './domains/sources/SourcesModule';
+import { KBModule } from './domains/kb/KBModule';
+import { MemoryModule } from './domains/memory/MemoryModule';
 import { PlaceholderModule } from './components/common/PlaceholderModule';
 import type { NavModule } from './components/layout/Rail';
 
@@ -56,11 +59,11 @@ function AppContent() {
             case 'goals':
               return <PlaceholderModule name="Goals" phase="Phase 4" />;
             case 'kb':
-              return <PlaceholderModule name="Knowledge Base" phase="Phase 3" />;
+              return <KBModule />;
             case 'sources':
-              return <PlaceholderModule name="Sources" phase="Phase 3" />;
+              return <SourcesModule />;
             case 'memory':
-              return <PlaceholderModule name="Memory" phase="Phase 3" />;
+              return <MemoryModule />;
             case 'templates':
               return <TemplatesModule />;
             default:

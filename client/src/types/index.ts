@@ -194,3 +194,134 @@ export interface TokenResponse {
   token_type: string;
   user: UserResponse;
 }
+
+// =============================================================================
+// Phase 3: Sources + KB + Memory
+// =============================================================================
+
+// Source type (Section 6)
+export type SourceType = 'article' | 'tweet' | 'bookmark' | 'note' | 'podcast' | 'video' | 'pdf' | 'other';
+
+// Source processing status (Section 6: 4-stage)
+export type ProcessingStatus = 'raw' | 'normalized' | 'enriched' | 'error';
+
+// Source triage status (Section 6)
+export type TriageStatus = 'unreviewed' | 'ready' | 'promoted' | 'dismissed';
+
+// Source permanence (Section 6)
+export type Permanence = 'ephemeral' | 'reference' | 'canonical';
+
+// Source fragment type (Section 6)
+export type FragmentType = 'paragraph' | 'quote' | 'heading' | 'list_item' | 'code' | 'image_ref';
+
+// KB compile status (Section 7: 6-stage)
+export type CompileStatus = 'ingest' | 'parse' | 'compile' | 'review' | 'accept' | 'stale';
+
+// KB pipeline stage (Section 7: 5-stage)
+export type PipelineStage = 'draft' | 'review' | 'accepted' | 'published' | 'archived';
+
+// Memory type (Section 2.4)
+export type MemoryType = 'decision' | 'insight' | 'lesson' | 'principle' | 'preference';
+
+// Source response
+export interface SourceResponse {
+  node_id: string;
+  title: string;
+  summary: string | null;
+  source_type: SourceType;
+  url: string | null;
+  author: string | null;
+  platform: string | null;
+  published_at: string | null;
+  captured_at: string;
+  capture_context: string | null;
+  raw_content: string;
+  canonical_content: string | null;
+  processing_status: ProcessingStatus;
+  triage_status: TriageStatus;
+  permanence: Permanence;
+  checksum: string | null;
+  media_refs: unknown[];
+  ai_summary: string | null;
+  ai_takeaways: unknown[] | null;
+  ai_entities: unknown[] | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface SourceListResponse {
+  items: SourceResponse[];
+  total: number;
+}
+
+export interface SourcePromoteResponse {
+  promoted_node_id: string;
+  edge_id: string;
+  source_node_id: string;
+  target_type: string;
+}
+
+// Source fragment response
+export interface FragmentResponse {
+  id: string;
+  source_node_id: string;
+  fragment_text: string;
+  position: number;
+  fragment_type: FragmentType;
+  section_ref: string | null;
+  created_at: string;
+}
+
+export interface FragmentListResponse {
+  items: FragmentResponse[];
+  total: number;
+}
+
+// KB response
+export interface KBResponse {
+  node_id: string;
+  title: string;
+  summary: string | null;
+  content: string;
+  raw_content: string | null;
+  compile_status: CompileStatus;
+  pipeline_stage: PipelineStage;
+  tags: string[];
+  compile_version: number;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface KBListResponse {
+  items: KBResponse[];
+  total: number;
+}
+
+export interface KBCompileResponse {
+  node_id: string;
+  compile_status: CompileStatus;
+  pipeline_stage: PipelineStage;
+  compile_version: number;
+}
+
+// Memory response
+export interface MemoryResponse {
+  node_id: string;
+  title: string;
+  summary: string | null;
+  memory_type: MemoryType;
+  content: string;
+  context: string | null;
+  review_at: string | null;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface MemoryListResponse {
+  items: MemoryResponse[];
+  total: number;
+}

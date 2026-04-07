@@ -7,13 +7,15 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Integer, Text, Index
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Integer, Text, Index
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from server.app.core.db.database import Base
 from server.app.core.models.enums import (
     NodeType, InboxItemStatus, TaskStatus, TaskPriority, Mood,
+    SourceType, ProcessingStatus, TriageStatus, Permanence, FragmentType,
+    CompileStatus, PipelineStage, MemoryType,
 )
 
 
@@ -132,4 +134,168 @@ class JournalNode(Base):
     __table_args__ = (
         Index("idx_journal_nodes_entry_date", "entry_date"),
         Index("idx_journal_nodes_mood", "mood"),
+    )
+
+
+# =============================================================================
+# Phase 3: Sources + KB + Memory companion tables
+# =============================================================================
+
+
+class SourceItemNode(Base):
+    """
+    Section 2.4 / Section 6: source_item_nodes companion table.
+    Source items represent external content captured into the system.
+    4-stage pipeline: capture -> normalize -> enrich -> promote.
+    Invariant B-01: Promotion contract governs source-to-knowledge flow.
+    """
+    __tablename__ = "source_item_nodes"
+
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    # Source identification
+    source_type: Mapped[SourceType] = mapped_column(nullable=False, default=SourceType.OTHER)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    author: Mapped[str | None] = mapped_column(Text, nullable=True)
+    platform: Mapped[str | None] = mapped_column(Text, nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Capture metadata
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+    )
+    capture_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Content
+    raw_content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    canonical_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Pipeline status
+    processing_status: Mapped[ProcessingStatus] = mapped_column(
+        nullable=False, default=ProcessingStatus.RAW
+    )
+    triage_status: Mapped[TriageStatus] = mapped_column(
+        nullable=False, default=TriageStatus.UNREVIEWED
+    )
+    permanence: Mapped[Permanence] = mapped_column(
+        nullable=False, default=Permanence.REFERENCE
+    )
+
+    # Deduplication
+    checksum: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Media references
+    media_refs: Mapped[dict] = mapped_column(JSONB, default=list)
+
+    # Invariant S-01: CACHED DERIVED - AI enrichment flat fields (temporary bridge for P9 migration)
+    ai_summary: Mapped[str | None] = mapped_column(
+        Text, nullable=True,
+        comment="CACHED DERIVED: AI-generated summary. Temporary bridge, migrate to node_enrichments in P9. Invariant S-01."
+    )
+    ai_takeaways: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True,
+        comment="CACHED DERIVED: AI-generated takeaways. Temporary bridge, migrate to node_enrichments in P9. Invariant S-01."
+    )
+    ai_entities: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True,
+        comment="CACHED DERIVED: AI-extracted entities. Temporary bridge, migrate to node_enrichments in P9. Invariant S-01."
+    )
+
+    __table_args__ = (
+        Index("idx_source_item_nodes_processing", "processing_status"),
+        Index("idx_source_item_nodes_triage", "triage_status"),
+        Index("idx_source_item_nodes_type", "source_type"),
+        Index("idx_source_item_nodes_checksum", "checksum", postgresql_where="checksum IS NOT NULL"),
+        Index("idx_source_item_nodes_url", "url", postgresql_where="url IS NOT NULL"),
+        Index("idx_source_item_nodes_captured", "captured_at"),
+    )
+
+
+class SourceFragment(Base):
+    """
+    Section 6: source_fragments table.
+    Fragments are sub-parts of a source item used for fine-grained retrieval and citation.
+    """
+    __tablename__ = "source_fragments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    fragment_text: Mapped[str] = mapped_column(Text, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    fragment_type: Mapped[FragmentType] = mapped_column(nullable=False, default=FragmentType.PARAGRAPH)
+    section_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Invariant S-01: CACHED DERIVED - semantic embedding for fragment-level retrieval
+    embedding = mapped_column(
+        Vector(1536), nullable=True,
+        comment="CACHED DERIVED: Semantic embedding for fragment-level retrieval. Invariant S-01."
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_source_fragments_source", "source_node_id"),
+        Index("idx_source_fragments_type", "fragment_type"),
+        Index("idx_source_fragments_position", "source_node_id", "position"),
+    )
+
+
+class KBNode(Base):
+    """
+    Section 2.4: kb_nodes companion table.
+    Knowledge base entries are canonical, curated knowledge articles.
+    6-stage compilation pipeline: ingest -> parse -> compile -> review -> accept -> stale.
+    """
+    __tablename__ = "kb_nodes"
+
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    raw_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    compile_status: Mapped[CompileStatus] = mapped_column(
+        nullable=False, default=CompileStatus.INGEST
+    )
+    pipeline_stage: Mapped[PipelineStage] = mapped_column(
+        nullable=False, default=PipelineStage.DRAFT
+    )
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    compile_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        Index("idx_kb_nodes_compile_status", "compile_status"),
+        Index("idx_kb_nodes_pipeline_stage", "pipeline_stage"),
+    )
+
+
+class MemoryNode(Base):
+    """
+    Section 2.4: memory_nodes companion table.
+    Captures decisions, insights, lessons, principles, and preferences.
+    """
+    __tablename__ = "memory_nodes"
+
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    memory_type: Mapped[MemoryType] = mapped_column(nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+
+    __table_args__ = (
+        Index("idx_memory_nodes_type", "memory_type"),
+        Index("idx_memory_nodes_review", "review_at", postgresql_where="review_at IS NOT NULL"),
     )

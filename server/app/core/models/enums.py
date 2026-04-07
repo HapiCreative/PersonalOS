@@ -96,3 +96,83 @@ class TemplateTargetType(str, enum.Enum):
     GOAL = "goal"
     TASK = "task"
     JOURNAL_ENTRY = "journal_entry"
+
+
+# =============================================================================
+# Phase 3: Sources + KB + Memory enums
+# =============================================================================
+
+
+class SourceType(str, enum.Enum):
+    """Section 6: Source item types."""
+    ARTICLE = "article"
+    TWEET = "tweet"
+    BOOKMARK = "bookmark"
+    NOTE = "note"
+    PODCAST = "podcast"
+    VIDEO = "video"
+    PDF = "pdf"
+    OTHER = "other"
+
+
+class ProcessingStatus(str, enum.Enum):
+    """Section 6: Source processing pipeline status (4-stage)."""
+    RAW = "raw"
+    NORMALIZED = "normalized"
+    ENRICHED = "enriched"
+    ERROR = "error"
+
+
+class TriageStatus(str, enum.Enum):
+    """Section 6: Human triage decision on source items."""
+    UNREVIEWED = "unreviewed"
+    READY = "ready"
+    PROMOTED = "promoted"
+    DISMISSED = "dismissed"
+
+
+class Permanence(str, enum.Enum):
+    """Section 6: Source item permanence classification."""
+    EPHEMERAL = "ephemeral"
+    REFERENCE = "reference"
+    CANONICAL = "canonical"
+
+
+class FragmentType(str, enum.Enum):
+    """Section 6: Source fragment types."""
+    PARAGRAPH = "paragraph"
+    QUOTE = "quote"
+    HEADING = "heading"
+    LIST_ITEM = "list_item"
+    CODE = "code"
+    IMAGE_REF = "image_ref"
+
+
+class CompileStatus(str, enum.Enum):
+    """Section 7: KB compilation pipeline (6-stage).
+    ingest -> parse -> compile -> review -> accept -> stale
+    """
+    INGEST = "ingest"
+    PARSE = "parse"
+    COMPILE = "compile"
+    REVIEW = "review"
+    ACCEPT = "accept"
+    STALE = "stale"
+
+
+class PipelineStage(str, enum.Enum):
+    """Section 7: KB lifecycle pipeline stage (5-stage)."""
+    DRAFT = "draft"
+    REVIEW = "review"
+    ACCEPTED = "accepted"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
+
+
+class MemoryType(str, enum.Enum):
+    """Section 2.4: Memory node types."""
+    DECISION = "decision"
+    INSIGHT = "insight"
+    LESSON = "lesson"
+    PRINCIPLE = "principle"
+    PREFERENCE = "preference"
