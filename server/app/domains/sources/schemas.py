@@ -56,9 +56,8 @@ class SourceResponse(BaseModel):
     permanence: Permanence
     checksum: str | None
     media_refs: list | dict | None
-    ai_summary: str | None
-    ai_takeaways: list | dict | None
-    ai_entities: list | dict | None
+    # Phase 10: ai_summary, ai_takeaways, ai_entities removed.
+    # Enrichments now live exclusively in node_enrichments table (Section 4.8).
     created_at: datetime
     updated_at: datetime
     archived_at: datetime | None
