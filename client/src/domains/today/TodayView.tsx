@@ -14,6 +14,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { tokens } from '../../styles/tokens';
 import { todayApi } from '../../api/endpoints';
 import type { TodayViewResponse, TodaySectionResponse, TodayItemResponse } from '../../types';
+import { MorningCommit } from './MorningCommit';
+import { FocusMode } from './FocusMode';
+import { EveningReflection } from './EveningReflection';
 
 const SECTION_LABELS: Record<string, string> = {
   focus: 'In Focus',
@@ -55,10 +58,17 @@ interface TodayViewProps {
   onNavigate?: (module: string) => void;
 }
 
+/**
+ * Phase 7 sub-views: morning commit, focus mode, evening reflection.
+ * These are full-screen overlays activated from the Today View stage buttons.
+ */
+type SubView = 'none' | 'commit' | 'focus' | 'reflect';
+
 export function TodayView({ onNavigate }: TodayViewProps) {
   const [data, setData] = useState<TodayViewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [subView, setSubView] = useState<SubView>('none');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -76,6 +86,31 @@ export function TodayView({ onNavigate }: TodayViewProps) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Phase 7: Render sub-views
+  if (subView === 'commit') {
+    return (
+      <MorningCommit
+        onCommitted={() => { setSubView('none'); fetchData(); }}
+        onSkip={() => setSubView('none')}
+      />
+    );
+  }
+
+  if (subView === 'focus') {
+    return (
+      <FocusMode onExit={() => { setSubView('none'); fetchData(); }} />
+    );
+  }
+
+  if (subView === 'reflect') {
+    return (
+      <EveningReflection
+        onComplete={() => { setSubView('none'); fetchData(); }}
+        onSkip={() => setSubView('none')}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -115,21 +150,54 @@ export function TodayView({ onNavigate }: TodayViewProps) {
             </span>
           </div>
 
-          {/* Daily cycle stage indicator */}
+          {/* Daily cycle stage indicator — Phase 7: clickable stage chips */}
           <div style={styles.stageRow}>
-            {['commit', 'execute', 'reflect', 'learn'].map((stage) => (
-              <div
-                key={stage}
-                style={{
-                  ...styles.stageChip,
-                  background: data.stage === stage ? `${STAGE_COLORS[stage]}20` : 'transparent',
-                  borderColor: data.stage === stage ? STAGE_COLORS[stage] : tokens.colors.border,
-                  color: data.stage === stage ? STAGE_COLORS[stage] : tokens.colors.textMuted,
-                }}
-              >
-                {STAGE_LABELS[stage]}
-              </div>
-            ))}
+            {['commit', 'execute', 'reflect', 'learn'].map((stage) => {
+              const isActive = data.stage === stage;
+              const isClickable = stage === 'commit' || stage === 'execute' || stage === 'reflect';
+              return (
+                <button
+                  key={stage}
+                  onClick={() => {
+                    if (stage === 'commit') setSubView('commit');
+                    else if (stage === 'execute') setSubView('focus');
+                    else if (stage === 'reflect') setSubView('reflect');
+                  }}
+                  disabled={!isClickable}
+                  style={{
+                    ...styles.stageChip,
+                    background: isActive ? `${STAGE_COLORS[stage]}20` : 'transparent',
+                    borderColor: isActive ? STAGE_COLORS[stage] : tokens.colors.border,
+                    color: isActive ? STAGE_COLORS[stage] : tokens.colors.textMuted,
+                    cursor: isClickable ? 'pointer' : 'default',
+                  }}
+                >
+                  {STAGE_LABELS[stage]}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Phase 7: Stage action prompt */}
+          <div style={styles.stageActionRow}>
+            {data.stage === 'commit' && !data.has_plan && (
+              <button onClick={() => setSubView('commit')} style={styles.stageActionButton}>
+                Start Morning Commit
+              </button>
+            )}
+            {data.stage === 'commit' && data.has_plan && (
+              <span style={styles.planStatus}>Plan committed &#10003;</span>
+            )}
+            {(data.stage === 'execute') && (
+              <button onClick={() => setSubView('focus')} style={styles.stageActionButton}>
+                {data.active_focus_task_id ? 'Return to Focus' : 'Enter Focus Mode'}
+              </button>
+            )}
+            {data.stage === 'reflect' && (
+              <button onClick={() => setSubView('reflect')} style={styles.stageActionButtonReflect}>
+                Begin Evening Reflection
+              </button>
+            )}
           </div>
 
           <div style={styles.itemCount}>
@@ -314,6 +382,38 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: tokens.fonts.sans,
     fontSize: 12,
     fontWeight: 500,
+    background: 'none',
+  },
+  stageActionRow: {
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  stageActionButton: {
+    padding: '7px 16px',
+    borderRadius: tokens.radius,
+    border: `1px solid ${tokens.colors.accent}50`,
+    fontFamily: tokens.fonts.sans,
+    fontSize: 13,
+    fontWeight: 500,
+    color: tokens.colors.accent,
+    cursor: 'pointer',
+    background: `${tokens.colors.accent}08`,
+  },
+  stageActionButtonReflect: {
+    padding: '7px 16px',
+    borderRadius: tokens.radius,
+    border: `1px solid ${tokens.colors.violet}50`,
+    fontFamily: tokens.fonts.sans,
+    fontSize: 13,
+    fontWeight: 500,
+    color: tokens.colors.violet,
+    cursor: 'pointer',
+    background: `${tokens.colors.violet}08`,
+  },
+  planStatus: {
+    fontFamily: tokens.fonts.mono,
+    fontSize: 12,
+    color: tokens.colors.success,
   },
   itemCount: {
     fontFamily: tokens.fonts.mono,

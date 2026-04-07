@@ -33,6 +33,8 @@ from server.app.core.models.enums import (
 )
 from server.app.derived.stale_detection import detect_all_stale
 from server.app.temporal.snooze_records import get_snoozed_node_ids
+from server.app.temporal.daily_plans_service import get_daily_plan
+from server.app.temporal.focus_sessions_service import get_active_focus_session
 
 
 # =============================================================================
@@ -80,6 +82,8 @@ class TodayViewResult:
     sections: dict[str, list[TodayItem]]
     stage: str  # current daily cycle stage
     date: date
+    has_plan: bool = False  # Phase 7: whether a daily plan exists for today
+    active_focus_task_id: uuid.UUID | None = None  # Phase 7: active focus session task
 
 
 async def _get_due_overdue_tasks(
@@ -340,12 +344,56 @@ def _apply_ranking_and_caps(
     return all_items, final_sections
 
 
+async def _get_planned_focus_tasks(
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+    task_ids: list[uuid.UUID],
+) -> list[TodayItem]:
+    """
+    Phase 7: Get focus items from daily plan's selected tasks.
+    When a morning commitment exists, these replace the default in-progress focus items.
+    """
+    if not task_ids:
+        return []
+
+    stmt = (
+        select(Node, TaskNode)
+        .join(TaskNode, TaskNode.node_id == Node.id)
+        .where(
+            Node.id.in_(task_ids),
+            Node.owner_id == owner_id,
+            Node.type == NodeType.TASK,
+            Node.archived_at.is_(None),
+        )
+    )
+    result = await db.execute(stmt)
+    rows = {n.id: (n, t) for n, t in result.all()}
+
+    items = []
+    for tid in task_ids:
+        if tid in rows:
+            node, task = rows[tid]
+            items.append(TodayItem(
+                section="focus",
+                item_type="task",
+                node_id=node.id,
+                title=node.title,
+                subtitle=f"Committed - {task.priority.value}",
+                priority=task.priority.value,
+                due_date=task.due_date,
+                metadata={"status": task.status.value, "planned": True},
+            ))
+    return items
+
+
 async def assemble_today_view(
     db: AsyncSession,
     owner_id: uuid.UUID,
 ) -> TodayViewResult:
     """
     Assemble the Today View behavioral surface.
+
+    Phase 7: Integrates daily plan awareness and active focus session.
 
     Invariant U-02: Hard cap of 10 items.
     Invariant U-04: Per-section caps.
@@ -354,8 +402,23 @@ async def assemble_today_view(
     """
     today = date.today()
 
-    # Gather items from all sources
-    focus_items = await _get_in_progress_tasks(db, owner_id)
+    # Phase 7: Check for daily plan — if plan exists, use planned tasks for focus
+    daily_plan = await get_daily_plan(db, owner_id, today)
+    has_plan = daily_plan is not None
+
+    if has_plan and daily_plan.selected_task_ids:
+        # Use committed tasks as focus items
+        focus_items = await _get_planned_focus_tasks(
+            db, owner_id, daily_plan.selected_task_ids,
+        )
+    else:
+        # No plan yet — fall back to in-progress tasks
+        focus_items = await _get_in_progress_tasks(db, owner_id)
+
+    # Phase 7: Check for active focus session
+    active_session = await get_active_focus_session(db, owner_id)
+    active_focus_task_id = active_session.task_id if active_session else None
+
     due_items = await _get_due_overdue_tasks(db, owner_id, today)
     goal_nudges = await _get_goal_nudges(db, owner_id)
     journal_prompt = await _get_journal_prompt(db, owner_id, today)
@@ -376,17 +439,21 @@ async def assemble_today_view(
     all_items, final_sections = _apply_ranking_and_caps(sections)
 
     # Determine daily cycle stage
-    # Simple heuristic: morning = commit, afternoon = execute, evening = reflect
+    # Phase 7: plan-aware stage detection
     now = datetime.now(timezone.utc)
     hour = now.hour
-    if hour < 10:
-        stage = "commit"
-    elif hour < 17:
-        stage = "execute"
-    elif hour < 22:
-        stage = "reflect"
+    if has_plan and daily_plan.closed_at is not None:
+        stage = "learn"  # Plan closed = learning phase
+    elif not has_plan and hour < 12:
+        stage = "commit"  # No plan yet in morning = commit phase
+    elif has_plan and active_focus_task_id:
+        stage = "execute"  # Active focus session = execute phase
+    elif has_plan and hour < 17:
+        stage = "execute"  # Plan exists, afternoon = execute phase
+    elif hour >= 17:
+        stage = "reflect"  # Evening = reflect phase
     else:
-        stage = "learn"
+        stage = "execute"  # Default to execute if plan exists
 
     return TodayViewResult(
         items=all_items,
@@ -394,4 +461,6 @@ async def assemble_today_view(
         sections=final_sections,
         stage=stage,
         date=today,
+        has_plan=has_plan,
+        active_focus_task_id=active_focus_task_id,
     )

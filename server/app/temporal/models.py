@@ -12,8 +12,8 @@ Invariants:
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from server.app.core.db.database import Base
@@ -62,6 +62,99 @@ class TaskExecutionEvent(Base):
         Index("idx_task_execution_events_task", "task_id"),
         Index("idx_task_execution_events_date", "expected_for_date"),
         Index("idx_task_execution_events_user", "user_id"),
+    )
+
+
+class DailyPlan(Base):
+    """
+    Section 3 (TABLE 22): daily_plans temporal table.
+    One plan per user per date. First commit wins; subsequent edits update in place.
+
+    Invariant T-01: No temporal-to-temporal FKs (references Core users + nodes only).
+    Invariant T-04: user_id must match owner_id of referenced task nodes.
+    """
+    __tablename__ = "daily_plans"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    selected_task_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        nullable=False,
+        default=list,
+        comment="Task node IDs chosen for the day (references nodes.id)",
+    )
+    intention_text: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Optional daily intention text",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="When the plan was closed (evening reflection)",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", name="uq_daily_plans_user_date"),
+        Index("idx_daily_plans_user", "user_id"),
+        Index("idx_daily_plans_date", "date"),
+    )
+
+
+class FocusSession(Base):
+    """
+    Section 3 (TABLE 25): focus_sessions temporal table.
+    Timed work sessions linked to a task. Append-only temporal records.
+
+    Invariant T-01: No temporal-to-temporal FKs (references Core nodes only).
+    Invariant T-02: Append-only (application layer enforces no deletes).
+    Invariant T-04: user_id must match task node's owner_id.
+    """
+    __tablename__ = "focus_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="Task being focused on (FK -> nodes.id)",
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="NULL if session still active",
+    )
+    duration: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Duration in seconds, computed when session ends",
+    )
+
+    __table_args__ = (
+        CheckConstraint("duration IS NULL OR duration >= 0", name="chk_focus_session_duration"),
+        Index("idx_focus_sessions_user", "user_id"),
+        Index("idx_focus_sessions_task", "task_id"),
+        Index("idx_focus_sessions_started", "started_at"),
     )
 
 
