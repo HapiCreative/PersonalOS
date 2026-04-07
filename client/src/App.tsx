@@ -5,6 +5,9 @@ import { RegisterPage } from './auth/RegisterPage';
 import { AppShell } from './components/layout/AppShell';
 import { CommandPalette } from './components/CommandPalette';
 import { InboxModule } from './domains/inbox/InboxModule';
+import { TasksModule } from './domains/tasks/TasksModule';
+import { JournalModule } from './domains/journal/JournalModule';
+import { TemplatesModule } from './domains/templates/TemplatesModule';
 import { PlaceholderModule } from './components/common/PlaceholderModule';
 import type { NavModule } from './components/layout/Rail';
 
@@ -47,9 +50,9 @@ function AppContent() {
             case 'today':
               return <PlaceholderModule name="Today" phase="Phase 4" />;
             case 'tasks':
-              return <PlaceholderModule name="Tasks" phase="Phase 2" />;
+              return <TasksModule />;
             case 'journal':
-              return <PlaceholderModule name="Journal" phase="Phase 2" />;
+              return <JournalModule />;
             case 'goals':
               return <PlaceholderModule name="Goals" phase="Phase 4" />;
             case 'kb':
@@ -58,6 +61,8 @@ function AppContent() {
               return <PlaceholderModule name="Sources" phase="Phase 3" />;
             case 'memory':
               return <PlaceholderModule name="Memory" phase="Phase 3" />;
+            case 'templates':
+              return <TemplatesModule />;
             default:
               return <InboxModule />;
           }

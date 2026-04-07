@@ -34,6 +34,21 @@ export type EdgeState = 'active' | 'pending_review' | 'dismissed';
 // Inbox item status (Section 2.4)
 export type InboxItemStatus = 'pending' | 'promoted' | 'dismissed' | 'merged' | 'archived';
 
+// Task status (Section 2.4) - Invariant B-03: state machine
+export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'cancelled';
+
+// Task priority (Section 2.4)
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+// Mood (Section 2.4) - v6 ENUM
+export type Mood = 'great' | 'good' | 'neutral' | 'low' | 'bad';
+
+// Task execution event type (Section 3.7)
+export type TaskExecutionEventType = 'completed' | 'skipped' | 'deferred';
+
+// Template target type (Section 2.4)
+export type TemplateTargetType = 'goal' | 'task' | 'journal_entry';
+
 // Response types
 export interface NodeResponse {
   id: string;
@@ -90,6 +105,81 @@ export interface SearchResponse {
   items: NodeResponse[];
   total: number;
   query: string;
+}
+
+// Phase 2: Task response
+export interface TaskResponse {
+  node_id: string;
+  title: string;
+  summary: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  due_date: string | null;
+  recurrence: string | null;
+  is_recurring: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface TaskListResponse {
+  items: TaskResponse[];
+  total: number;
+}
+
+// Phase 2: Journal response
+export interface JournalResponse {
+  node_id: string;
+  title: string;
+  summary: string | null;
+  content: string;
+  entry_date: string;
+  mood: Mood | null;
+  tags: string[];
+  word_count: number;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface JournalListResponse {
+  items: JournalResponse[];
+  total: number;
+}
+
+// Phase 2: Template response
+export interface TemplateResponse {
+  id: string;
+  owner_id: string;
+  name: string;
+  target_type: TemplateTargetType;
+  structure: Record<string, unknown>;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TemplateListResponse {
+  items: TemplateResponse[];
+  total: number;
+}
+
+// Phase 2: Task execution event response
+export interface TaskExecutionEventResponse {
+  id: string;
+  task_id: string;
+  user_id: string;
+  event_type: TaskExecutionEventType;
+  expected_for_date: string;
+  notes: string | null;
+  created_at: string;
+  node_deleted: boolean;
+}
+
+export interface TaskExecutionEventListResponse {
+  items: TaskExecutionEventResponse[];
+  total: number;
 }
 
 export interface UserResponse {
