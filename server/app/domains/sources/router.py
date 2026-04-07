@@ -56,9 +56,8 @@ def _to_response(node, source) -> SourceResponse:
         permanence=source.permanence,
         checksum=source.checksum,
         media_refs=source.media_refs,
-        ai_summary=source.ai_summary,
-        ai_takeaways=source.ai_takeaways,
-        ai_entities=source.ai_entities,
+        # Phase 10: ai_summary/ai_takeaways/ai_entities removed.
+        # Enrichments now live in node_enrichments (Section 4.8).
         created_at=node.created_at,
         updated_at=node.updated_at,
         archived_at=node.archived_at,

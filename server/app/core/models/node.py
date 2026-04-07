@@ -192,19 +192,9 @@ class SourceItemNode(Base):
     # Media references
     media_refs: Mapped[dict] = mapped_column(JSONB, default=list)
 
-    # Invariant S-01: CACHED DERIVED - AI enrichment flat fields (temporary bridge for P9 migration)
-    ai_summary: Mapped[str | None] = mapped_column(
-        Text, nullable=True,
-        comment="CACHED DERIVED: AI-generated summary. Temporary bridge, migrate to node_enrichments in P9. Invariant S-01."
-    )
-    ai_takeaways: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True,
-        comment="CACHED DERIVED: AI-generated takeaways. Temporary bridge, migrate to node_enrichments in P9. Invariant S-01."
-    )
-    ai_entities: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True,
-        comment="CACHED DERIVED: AI-extracted entities. Temporary bridge, migrate to node_enrichments in P9. Invariant S-01."
-    )
+    # Phase 10: ai_summary, ai_takeaways, ai_entities removed.
+    # Enrichments now live exclusively in node_enrichments table (Section 4.8).
+    # Migration completed in 010_phase10_polish_export_retention.sql.
 
     __table_args__ = (
         Index("idx_source_item_nodes_processing", "processing_status"),

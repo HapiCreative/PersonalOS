@@ -18,6 +18,8 @@ import { ReviewModule } from './domains/review/ReviewModule';
 import { CleanupModule } from './domains/cleanup/CleanupModule';
 import { AIModule } from './domains/ai/AIModule';
 import { PlaceholderModule } from './components/common/PlaceholderModule';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { SettingsModule } from './domains/settings/SettingsModule';
 import type { NavModule } from './components/layout/Rail';
 
 function AppContent() {
@@ -53,7 +55,8 @@ function AppContent() {
     <>
       <AppShell onLogout={logout}>
         {(activeModule: NavModule, onNavigate: (m: NavModule) => void) => {
-          switch (activeModule) {
+          // Phase 10: ErrorBoundary wraps each module for graceful error handling
+          const content = (() => { switch (activeModule) {
             case 'inbox':
               return <InboxModule />;
             case 'today':
@@ -80,9 +83,12 @@ function AppContent() {
               return <CleanupModule onNavigate={(m) => onNavigate(m as NavModule)} />;
             case 'templates':
               return <TemplatesModule />;
+            case 'settings':
+              return <SettingsModule />;
             default:
               return <InboxModule />;
-          }
+          }})();
+          return <ErrorBoundary key={activeModule}>{content}</ErrorBoundary>;
         }}
       </AppShell>
       <CommandPalette

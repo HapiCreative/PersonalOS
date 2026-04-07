@@ -97,6 +97,13 @@ import type {
   PipelineJobListResponse,
   PipelineJobType,
   PipelineJobStatus,
+  // Phase 10
+  ExportResponse,
+  ImportResponse,
+  RetentionEnforceResponse,
+  RetentionStatsResponse,
+  BatchEmbedResponse,
+  CacheRefreshResponse,
 } from '../types';
 
 // Auth
@@ -669,6 +676,35 @@ export const enrichmentsApi = {
     api.post<EnrichmentResponse>(`/enrichments/${nodeId}/${enrichmentType}/rollback`, {
       restore_enrichment_id: restoreEnrichmentId,
     }),
+};
+
+// =============================================================================
+// Phase 10: Admin (Export/Import, Retention, Caching, Batch Embedding)
+// =============================================================================
+
+export const adminApi = {
+  // Export/Import (Section 1.1: Core entities are exportable)
+  exportData: (params?: { include_archived?: boolean; include_enrichments?: boolean }) =>
+    api.post<ExportResponse>('/admin/export', params || {}),
+  importData: (data: Record<string, unknown>, mergeStrategy?: string) =>
+    api.post<ImportResponse>('/admin/import', {
+      data,
+      merge_strategy: mergeStrategy || 'skip_existing',
+    }),
+
+  // Retention Policy (Section 1.7)
+  enforceRetention: () =>
+    api.post<RetentionEnforceResponse>('/admin/retention/enforce'),
+  retentionStats: () =>
+    api.get<RetentionStatsResponse>('/admin/retention/stats'),
+
+  // Caching (Phase 10: materialized view refresh)
+  refreshCache: () =>
+    api.post<CacheRefreshResponse>('/admin/cache/refresh'),
+
+  // Batch Embedding (Phase 10)
+  batchEmbed: (params?: { node_ids?: string[]; force_recompute?: boolean; limit?: number }) =>
+    api.post<BatchEmbedResponse>('/admin/batch-embed', params || {}),
 };
 
 // Pipeline Jobs (Section 7.3)

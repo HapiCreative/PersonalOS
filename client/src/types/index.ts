@@ -248,9 +248,8 @@ export interface SourceResponse {
   permanence: Permanence;
   checksum: string | null;
   media_refs: unknown[];
-  ai_summary: string | null;
-  ai_takeaways: unknown[] | null;
-  ai_entities: unknown[] | null;
+  // Phase 10: ai_summary, ai_takeaways, ai_entities removed.
+  // Enrichments now live in node_enrichments (Section 4.8).
   created_at: string;
   updated_at: string;
   archived_at: string | null;
@@ -941,4 +940,61 @@ export interface ClassifyInboxResponse {
 // AI briefing response
 export interface BriefingResponse {
   bullets: string[];
+}
+
+// =============================================================================
+// Phase 10: Export/Import + Admin
+// =============================================================================
+
+export interface ExportResponse {
+  version: string;
+  exported_at: string;
+  owner_id: string;
+  node_count: number;
+  edge_count: number;
+  enrichment_count: number;
+  nodes: Record<string, unknown>[];
+  edges: Record<string, unknown>[];
+  enrichments: Record<string, unknown>[];
+}
+
+export interface ImportResponse {
+  nodes_created: number;
+  nodes_skipped: number;
+  edges_created: number;
+  edges_skipped: number;
+  enrichments_created: number;
+  errors: string[];
+  id_mapping: Record<string, string>;
+}
+
+export interface RetentionEnforceResponse {
+  pipeline_jobs_deleted: number;
+  enrichments_deleted: number;
+  errors: string[];
+}
+
+export interface RetentionStatsResponse {
+  pipeline_jobs: {
+    total: number;
+    eligible_for_cleanup: number;
+    retention_days: number;
+  };
+  enrichments: {
+    total: number;
+    superseded_eligible_for_cleanup: number;
+    retention_days: number;
+  };
+}
+
+export interface BatchEmbedResponse {
+  total_processed: number;
+  total_embedded: number;
+  total_skipped: number;
+  total_errors: number;
+  node_ids_embedded: string[];
+}
+
+export interface CacheRefreshResponse {
+  materialized_views: Record<string, string>;
 }
