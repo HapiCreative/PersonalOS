@@ -11,6 +11,8 @@ import { TemplatesModule } from './domains/templates/TemplatesModule';
 import { SourcesModule } from './domains/sources/SourcesModule';
 import { KBModule } from './domains/kb/KBModule';
 import { MemoryModule } from './domains/memory/MemoryModule';
+import { GoalsModule } from './domains/goals/GoalsModule';
+import { TodayView } from './domains/today/TodayView';
 import { PlaceholderModule } from './components/common/PlaceholderModule';
 import type { NavModule } from './components/layout/Rail';
 
@@ -46,18 +48,18 @@ function AppContent() {
   return (
     <>
       <AppShell onLogout={logout}>
-        {(activeModule: NavModule) => {
+        {(activeModule: NavModule, onNavigate: (m: NavModule) => void) => {
           switch (activeModule) {
             case 'inbox':
               return <InboxModule />;
             case 'today':
-              return <PlaceholderModule name="Today" phase="Phase 4" />;
+              return <TodayView onNavigate={(m) => onNavigate(m as NavModule)} />;
             case 'tasks':
               return <TasksModule />;
             case 'journal':
               return <JournalModule />;
             case 'goals':
-              return <PlaceholderModule name="Goals" phase="Phase 4" />;
+              return <GoalsModule />;
             case 'kb':
               return <KBModule />;
             case 'sources':

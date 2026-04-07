@@ -325,3 +325,74 @@ export interface MemoryListResponse {
   items: MemoryResponse[];
   total: number;
 }
+
+// =============================================================================
+// Phase 4: Goals + Today View
+// =============================================================================
+
+// Goal status (Section 2.4)
+export type GoalStatus = 'active' | 'completed' | 'archived';
+
+// Goal response
+export interface GoalResponse {
+  node_id: string;
+  title: string;
+  summary: string | null;
+  status: GoalStatus;
+  start_date: string | null;
+  end_date: string | null;
+  timeframe_label: string | null;
+  progress: number; // CACHED DERIVED, Invariant D-03
+  milestones: Record<string, unknown>[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface GoalLinkedTaskResponse {
+  node_id: string;
+  title: string;
+  status: string;
+  priority: string;
+  due_date: string | null;
+  is_recurring: boolean;
+  edge_id: string;
+  edge_weight: number;
+}
+
+export interface GoalWithTasksResponse extends GoalResponse {
+  linked_tasks: GoalLinkedTaskResponse[];
+}
+
+export interface GoalListResponse {
+  items: GoalResponse[];
+  total: number;
+}
+
+// Today View (Section 5.1)
+export interface TodayItemResponse {
+  section: string;
+  item_type: string;
+  node_id: string | null;
+  title: string;
+  subtitle: string;
+  priority: string | null;
+  due_date: string | null;
+  progress: number | null;
+  is_unsolicited: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export interface TodaySectionResponse {
+  name: string;
+  items: TodayItemResponse[];
+}
+
+export interface TodayViewResponse {
+  items: TodayItemResponse[];
+  total_count: number;
+  sections: TodaySectionResponse[];
+  stage: string;
+  date: string;
+}
