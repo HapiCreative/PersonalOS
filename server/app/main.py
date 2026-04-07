@@ -18,11 +18,13 @@ from server.app.domains.templates.router import router as templates_router
 from server.app.domains.sources.router import router as sources_router
 from server.app.domains.kb.router import router as kb_router
 from server.app.domains.memory.router import router as memory_router
+from server.app.domains.goals.router import router as goals_router
+from server.app.behavioral.router import router as today_router
 
 app = FastAPI(
     title="Personal OS",
     description="A behavior system for your life",
-    version="0.2.0",
+    version="0.3.0",
 )
 
 # CORS
@@ -51,10 +53,16 @@ app.include_router(sources_router)
 app.include_router(kb_router)
 app.include_router(memory_router)
 
+# Phase 4: Goals
+app.include_router(goals_router)
+
 # Temporal routers
 app.include_router(events_router)
+
+# Behavioral routers (Phase 4: Today View)
+app.include_router(today_router)
 
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.3.0"}

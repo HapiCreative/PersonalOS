@@ -176,3 +176,15 @@ class MemoryType(str, enum.Enum):
     LESSON = "lesson"
     PRINCIPLE = "principle"
     PREFERENCE = "preference"
+
+
+# =============================================================================
+# Phase 4: Goals enums
+# =============================================================================
+
+
+class GoalStatus(str, enum.Enum):
+    """Section 2.4: Goal lifecycle status."""
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"

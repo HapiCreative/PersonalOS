@@ -30,6 +30,11 @@ import type {
   KBCompileResponse,
   MemoryResponse,
   MemoryListResponse,
+  GoalResponse,
+  GoalListResponse,
+  GoalWithTasksResponse,
+  GoalStatus,
+  TodayViewResponse,
   NodeType,
   InboxItemStatus,
   EdgeRelationType,
@@ -317,6 +322,46 @@ export const kbApi = {
   }) => api.put<KBResponse>(`/kb/${nodeId}`, data),
   compile: (nodeId: string, action: string) =>
     api.post<KBCompileResponse>(`/kb/${nodeId}/compile`, { action }),
+};
+
+// Goals (Phase 4)
+export const goalsApi = {
+  list: (params?: { status?: GoalStatus; include_archived?: boolean; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.include_archived) query.set('include_archived', 'true');
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<GoalListResponse>(`/goals?${query}`);
+  },
+  get: (nodeId: string) => api.get<GoalWithTasksResponse>(`/goals/${nodeId}`),
+  create: (data: {
+    title: string;
+    summary?: string;
+    status?: GoalStatus;
+    start_date?: string;
+    end_date?: string;
+    timeframe_label?: string;
+    milestones?: Record<string, unknown>[];
+    notes?: string;
+  }) => api.post<GoalResponse>('/goals', data),
+  update: (nodeId: string, data: {
+    title?: string;
+    summary?: string;
+    status?: GoalStatus;
+    start_date?: string | null;
+    end_date?: string | null;
+    timeframe_label?: string | null;
+    milestones?: Record<string, unknown>[];
+    notes?: string | null;
+  }) => api.put<GoalResponse>(`/goals/${nodeId}`, data),
+  refreshProgress: (nodeId: string) =>
+    api.post<GoalResponse>(`/goals/${nodeId}/refresh-progress`),
+};
+
+// Today View (Phase 4 - Behavioral)
+export const todayApi = {
+  get: () => api.get<TodayViewResponse>('/today'),
 };
 
 // Memory (Phase 3)

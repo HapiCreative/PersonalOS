@@ -15,7 +15,7 @@ from server.app.core.db.database import Base
 from server.app.core.models.enums import (
     NodeType, InboxItemStatus, TaskStatus, TaskPriority, Mood,
     SourceType, ProcessingStatus, TriageStatus, Permanence, FragmentType,
-    CompileStatus, PipelineStage, MemoryType,
+    CompileStatus, PipelineStage, MemoryType, GoalStatus,
 )
 
 
@@ -298,4 +298,47 @@ class MemoryNode(Base):
     __table_args__ = (
         Index("idx_memory_nodes_type", "memory_type"),
         Index("idx_memory_nodes_review", "review_at", postgresql_where="review_at IS NOT NULL"),
+    )
+
+
+# =============================================================================
+# Phase 4: Goal companion table
+# =============================================================================
+
+
+class GoalNode(Base):
+    """
+    Section 2.4: goal_nodes companion table.
+    Goals are strategic objectives that track progress via linked tasks.
+    Invariant D-03: progress is non-canonical, stored for display convenience only.
+    """
+    __tablename__ = "goal_nodes"
+
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    status: Mapped[GoalStatus] = mapped_column(nullable=False, default=GoalStatus.ACTIVE)
+    start_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    timeframe_label: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Invariant S-01: CACHED DERIVED - weighted sum of completed tasks via goal_tracks_task edges
+    # Invariant D-03: Non-canonical, recomputable from task execution events + edges
+    progress: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0,
+        comment="CACHED DERIVED: Weighted sum of completed tasks via goal_tracks_task edges. Non-canonical (D-03). Invariant S-01."
+    )
+
+    milestones: Mapped[dict] = mapped_column(JSONB, default=list)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "progress >= 0.0 AND progress <= 1.0",
+            name="goal_progress_range",
+        ),
+        Index("idx_goal_nodes_status", "status"),
+        Index("idx_goal_nodes_end_date", "end_date", postgresql_where="end_date IS NOT NULL"),
     )
