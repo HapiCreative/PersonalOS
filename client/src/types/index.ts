@@ -101,8 +101,14 @@ export interface InboxItemListResponse {
   total: number;
 }
 
+// Phase 5: Search result with signal score
+export interface SearchResultItem {
+  node: NodeResponse;
+  signal_score: number | null;
+}
+
 export interface SearchResponse {
-  items: NodeResponse[];
+  items: SearchResultItem[];
   total: number;
   query: string;
 }
@@ -395,4 +401,102 @@ export interface TodayViewResponse {
   sections: TodaySectionResponse[];
   stage: string;
   date: string;
+}
+
+// =============================================================================
+// Phase 5: Derived Intelligence + Context Layer
+// =============================================================================
+
+// Signal score (Section 4 — 5-factor composite)
+// Invariant D-03: Non-canonical, recomputable (D-02)
+export interface SignalScoreResponse {
+  node_id: string;
+  score: number;
+  recency_score: number;
+  link_density_score: number;
+  completion_state_score: number;
+  reference_frequency_score: number;
+  user_interaction_score: number;
+  computed_at: string;
+  version: string | null;
+}
+
+export interface SignalScoreBatchResponse {
+  items: SignalScoreResponse[];
+  total: number;
+}
+
+// Progress intelligence (Section 4)
+// Invariant D-03: Non-canonical, recomputable (D-02)
+export interface ProgressIntelligenceResponse {
+  node_id: string;
+  progress: number;
+  momentum: number;
+  consistency_streak: number;
+  drift_score: number;
+  last_progress_at: string | null;
+  computed_at: string;
+  version: string | null;
+}
+
+export interface ProgressBatchResponse {
+  items: ProgressIntelligenceResponse[];
+  total: number;
+}
+
+// Retrieval modes (Section 4)
+export interface RetrievalModeInfo {
+  name: string;
+  description: string;
+  max_results: number;
+  type_weights: Record<string, number>;
+  recency_bias: number;
+}
+
+export interface RetrievalResultResponse {
+  node_id: string;
+  node_type: string;
+  title: string;
+  summary: string | null;
+  signal_score: number | null;
+  mode_weight: number;
+  combined_score: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface RetrievalResponse {
+  mode: string;
+  items: RetrievalResultResponse[];
+  total: number;
+}
+
+// Context layer (Section 4, 9.1)
+// Invariant U-03: Hard cap of 8 items
+// Invariant U-04: Per-category caps
+export interface ContextItemResponse {
+  category: string;
+  node_id: string;
+  node_type: string;
+  title: string;
+  relation_type: string | null;
+  edge_id: string | null;
+  weight: number | null;
+  confidence: number | null;
+  is_suggested: boolean;
+  label: string | null;
+  signal_score: number | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface ContextCategoryResponse {
+  name: string;
+  items: ContextItemResponse[];
+}
+
+export interface ContextLayerResponse {
+  items: ContextItemResponse[];
+  total_count: number;
+  categories: ContextCategoryResponse[];
+  node_id: string;
+  suppression_applied: boolean;
 }

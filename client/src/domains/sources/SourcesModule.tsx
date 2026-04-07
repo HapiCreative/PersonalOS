@@ -37,7 +37,7 @@ export function SourcesModule() {
           refreshKey={refreshKey}
         />
       </ListPane>
-      <DetailPane>
+      <DetailPane nodeId={selectedSource?.node_id}>
         {creating ? (
           <SourceCreate
             onCreated={handleUpdated}

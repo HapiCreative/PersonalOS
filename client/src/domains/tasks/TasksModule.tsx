@@ -37,7 +37,7 @@ export function TasksModule() {
           refreshKey={refreshKey}
         />
       </ListPane>
-      <DetailPane>
+      <DetailPane nodeId={selectedTask?.node_id}>
         {creating ? (
           <TaskCreate
             onCreated={handleUpdated}

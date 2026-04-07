@@ -13,7 +13,7 @@ from server.app.core.auth.dependencies import get_current_user
 from server.app.core.db.database import get_db
 from server.app.core.models.user import User
 from server.app.core.models.enums import EdgeRelationType, EdgeState
-from server.app.core.schemas.edge import EdgeCreate, EdgeListResponse, EdgeResponse
+from server.app.core.schemas.edge import EdgeCreate, EdgeListResponse, EdgeResponse, EdgeStateUpdate
 from server.app.core.services.edge_service import (
     create_edge,
     delete_edge,
@@ -112,12 +112,15 @@ async def delete_edge_endpoint(
 @router.patch("/api/edges/{edge_id}/state", response_model=EdgeResponse)
 async def update_edge_state_endpoint(
     edge_id: uuid.UUID,
-    new_state: EdgeState = Query(...),
+    body: EdgeStateUpdate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update edge state (e.g., accept or dismiss a suggested link)."""
-    edge = await update_edge_state(db, user.id, edge_id, new_state)
+    """
+    Update edge state (e.g., accept or dismiss a suggested link).
+    Phase 5: Used for one-click promotion of suggested links in context layer.
+    """
+    edge = await update_edge_state(db, user.id, edge_id, body.state)
     if edge is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Edge not found")
 

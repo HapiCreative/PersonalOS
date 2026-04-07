@@ -34,6 +34,11 @@ class EdgeResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EdgeStateUpdate(BaseModel):
+    """Phase 5: Update edge state (accept/dismiss suggested links)."""
+    state: EdgeState
+
+
 class EdgeListResponse(BaseModel):
     items: list[EdgeResponse]
     total: int

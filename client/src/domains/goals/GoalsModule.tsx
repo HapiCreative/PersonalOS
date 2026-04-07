@@ -37,7 +37,7 @@ export function GoalsModule() {
           refreshKey={refreshKey}
         />
       </ListPane>
-      <DetailPane>
+      <DetailPane nodeId={selectedGoal?.node_id}>
         {creating ? (
           <GoalCreate
             onCreated={handleUpdated}

@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { tokens } from '../styles/tokens';
 import { searchApi, inboxApi } from '../api/endpoints';
-import type { NodeResponse } from '../types';
+import type { NodeResponse, SearchResultItem } from '../types';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -18,7 +18,7 @@ interface CommandPaletteProps {
 export function CommandPalette({ open, onClose, onSelectNode }: CommandPaletteProps) {
   const [mode, setMode] = useState<'search' | 'capture'>('search');
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<NodeResponse[]>([]);
+  const [results, setResults] = useState<SearchResultItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [captureSuccess, setCaptureSuccess] = useState(false);
@@ -94,7 +94,7 @@ export function CommandPalette({ open, onClose, onSelectNode }: CommandPalettePr
         setSelectedIndex((i) => Math.max(i - 1, 0));
       } else if (e.key === 'Enter' && results[selectedIndex]) {
         e.preventDefault();
-        onSelectNode?.(results[selectedIndex]);
+        onSelectNode?.(results[selectedIndex].node);
         onClose();
       }
     } else if (mode === 'capture' && e.key === 'Enter' && query.trim()) {
@@ -144,21 +144,27 @@ export function CommandPalette({ open, onClose, onSelectNode }: CommandPalettePr
 
         {mode === 'search' && results.length > 0 && (
           <div style={styles.results}>
-            {results.map((node, i) => (
+            {results.map((item, i) => (
               <button
-                key={node.id}
+                key={item.node.id}
                 style={{
                   ...styles.resultItem,
                   background: i === selectedIndex ? `${tokens.colors.accent}15` : 'transparent',
                 }}
                 onClick={() => {
-                  onSelectNode?.(node);
+                  onSelectNode?.(item.node);
                   onClose();
                 }}
                 onMouseEnter={() => setSelectedIndex(i)}
               >
-                <span style={styles.resultType}>{node.type}</span>
-                <span style={styles.resultTitle}>{node.title}</span>
+                <span style={styles.resultType}>{item.node.type}</span>
+                <span style={styles.resultTitle}>{item.node.title}</span>
+                {/* Phase 5: Signal score display in search results */}
+                {item.signal_score !== null && item.signal_score !== undefined && (
+                  <span style={styles.signalScore}>
+                    {item.signal_score.toFixed(2)}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -257,6 +263,15 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
+  },
+  signalScore: {
+    fontFamily: tokens.fonts.mono,
+    fontSize: 10,
+    color: tokens.colors.accent,
+    padding: '1px 4px',
+    background: `${tokens.colors.accent}15`,
+    borderRadius: '2px',
+    flexShrink: 0,
   },
   empty: {
     padding: '16px',

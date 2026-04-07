@@ -37,7 +37,7 @@ export function KBModule() {
           refreshKey={refreshKey}
         />
       </ListPane>
-      <DetailPane>
+      <DetailPane nodeId={selectedKB?.node_id}>
         {creating ? (
           <KBCreate
             onCreated={handleUpdated}
