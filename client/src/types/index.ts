@@ -401,6 +401,8 @@ export interface TodayViewResponse {
   sections: TodaySectionResponse[];
   stage: string;
   date: string;
+  has_plan: boolean; // Phase 7: whether morning commitment exists
+  active_focus_task_id: string | null; // Phase 7: task in active focus session
 }
 
 // =============================================================================
@@ -575,4 +577,107 @@ export interface StaleCheckResponse {
   days_stale?: number | null;
   prompt?: string | null;
   explanation?: DerivedExplanation | null;
+}
+
+// =============================================================================
+// Phase 7: Daily Behavior Loop (Morning Commit + Focus + Evening Reflection)
+// =============================================================================
+
+// Daily plan (Section 3, TABLE 22)
+export interface DailyPlanResponse {
+  id: string;
+  user_id: string;
+  date: string;
+  selected_task_ids: string[];
+  intention_text: string | null;
+  created_at: string;
+  closed_at: string | null;
+}
+
+export interface DailyPlanListResponse {
+  items: DailyPlanResponse[];
+  total: number;
+}
+
+// Focus session (Section 3, TABLE 25)
+export interface FocusSessionResponse {
+  id: string;
+  user_id: string;
+  task_id: string;
+  started_at: string;
+  ended_at: string | null;
+  duration: number | null; // seconds
+}
+
+export interface FocusSessionListResponse {
+  items: FocusSessionResponse[];
+  total: number;
+}
+
+// Morning commit suggestions
+export interface SuggestedTaskResponse {
+  node_id: string;
+  title: string;
+  priority: string;
+  due_date: string | null;
+  status: string;
+  is_recurring: boolean;
+  signal_score: number | null;
+  reason: string; // overdue, due_today, high_signal, goal_drift
+  goal_title: string | null;
+}
+
+export interface MorningCommitSuggestionsResponse {
+  suggested_tasks: SuggestedTaskResponse[];
+  existing_plan: Record<string, unknown> | null;
+  date: string;
+  ai_briefing: string[];
+}
+
+export interface CommitResponse {
+  id: string;
+  date: string;
+  selected_task_ids: string[];
+  intention_text: string | null;
+  created_at: string;
+  closed_at: string | null;
+}
+
+// Evening reflection
+export interface TaskReflectionItemResponse {
+  node_id: string;
+  title: string;
+  priority: string;
+  status: string;
+  was_planned: boolean;
+  event_type: string | null;
+  focus_time_seconds: number;
+  notes: string | null;
+}
+
+export interface ReflectionPromptResponse {
+  prompt_id: string;
+  text: string;
+  category: string; // completion, blockers, gratitude, tomorrow
+}
+
+export interface EveningReflectionResponse {
+  date: string;
+  plan_exists: boolean;
+  planned_tasks: TaskReflectionItemResponse[];
+  unplanned_completed: TaskReflectionItemResponse[];
+  total_planned: number;
+  total_completed: number;
+  total_focus_time_seconds: number;
+  completion_rate: number; // 0.0-1.0
+  prompts: ReflectionPromptResponse[];
+  plan_id: string | null;
+  intention_text: string | null;
+}
+
+export interface ReflectionSubmitResponse {
+  skipped: string[];
+  deferred: string[];
+  plan_closed: boolean;
+  errors: string[];
 }

@@ -64,6 +64,15 @@ import type {
   CleanupActionResponse,
   SnoozeResponse,
   StaleCheckResponse,
+  // Phase 7
+  DailyPlanResponse,
+  DailyPlanListResponse,
+  FocusSessionResponse,
+  FocusSessionListResponse,
+  MorningCommitSuggestionsResponse,
+  CommitResponse,
+  EveningReflectionResponse,
+  ReflectionSubmitResponse,
 } from '../types';
 
 // Auth
@@ -448,6 +457,64 @@ export const snoozeApi = {
 export const staleApi = {
   check: (nodeId: string) =>
     api.get<StaleCheckResponse>(`/derived/stale/${nodeId}`),
+};
+
+// =============================================================================
+// Phase 7: Daily Plans + Focus Sessions + Morning Commit + Evening Reflection
+// =============================================================================
+
+// Daily Plans (Temporal)
+export const dailyPlansApi = {
+  list: (params?: { limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<DailyPlanListResponse>(`/daily-plans?${query}`);
+  },
+  getToday: () => api.get<DailyPlanResponse | null>('/daily-plans/today'),
+  getByDate: (date: string) => api.get<DailyPlanResponse | null>(`/daily-plans/${date}`),
+  create: (data: { date?: string; selected_task_ids: string[]; intention_text?: string }) =>
+    api.post<DailyPlanResponse>('/daily-plans', data),
+  close: (date: string) => api.post<DailyPlanResponse>(`/daily-plans/${date}/close`),
+};
+
+// Focus Sessions (Temporal)
+export const focusSessionsApi = {
+  list: (params?: { task_id?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.task_id) query.set('task_id', params.task_id);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<FocusSessionListResponse>(`/focus-sessions?${query}`);
+  },
+  get: (id: string) => api.get<FocusSessionResponse>(`/focus-sessions/${id}`),
+  getActive: () => api.get<FocusSessionResponse | null>('/focus-sessions/active'),
+  start: (task_id: string) =>
+    api.post<FocusSessionResponse>('/focus-sessions', { task_id }),
+  end: (id: string) =>
+    api.post<FocusSessionResponse>(`/focus-sessions/${id}/end`),
+};
+
+// Morning Commit (Behavioral)
+export const morningCommitApi = {
+  getSuggestions: () =>
+    api.get<MorningCommitSuggestionsResponse>('/today/suggestions'),
+  commit: (selected_task_ids: string[], intention_text?: string) =>
+    api.post<CommitResponse>('/today/commit', { selected_task_ids, intention_text }),
+};
+
+// Evening Reflection (Behavioral)
+export const eveningReflectionApi = {
+  get: (date?: string) => {
+    const query = new URLSearchParams();
+    if (date) query.set('reflection_date', date);
+    return api.get<EveningReflectionResponse>(`/today/reflection?${query}`);
+  },
+  submit: (data: {
+    skipped_task_ids?: string[];
+    deferred_task_ids?: string[];
+    reflection_notes?: string;
+  }) => api.post<ReflectionSubmitResponse>('/today/reflection', data),
 };
 
 // Memory (Phase 3)

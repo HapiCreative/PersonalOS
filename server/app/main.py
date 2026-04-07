@@ -23,6 +23,8 @@ from server.app.behavioral.router import router as today_router
 from server.app.behavioral.cleanup_router import router as cleanup_router
 from server.app.derived.router import router as derived_router
 from server.app.temporal.snooze_router import router as snooze_router
+from server.app.temporal.daily_plans_router import router as daily_plans_router
+from server.app.temporal.focus_sessions_router import router as focus_sessions_router
 
 app = FastAPI(
     title="Personal OS",
@@ -72,7 +74,11 @@ app.include_router(derived_router)
 app.include_router(cleanup_router)
 app.include_router(snooze_router)
 
+# Phase 7: Daily behavior loop (daily plans, focus sessions)
+app.include_router(daily_plans_router)
+app.include_router(focus_sessions_router)
+
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "0.6.0"}
+    return {"status": "ok", "version": "0.7.0"}
