@@ -17,6 +17,7 @@ class NodeType(str, enum.Enum):
     INBOX_ITEM = "inbox_item"
     PROJECT = "project"
     ACCOUNT = "account"  # Finance Module (Section 2.1)
+    OBLIGATION = "obligation"  # Finance Phase F2 (Obligations Addendum Section 2)
 
 
 class EdgeRelationType(str, enum.Enum):
@@ -33,6 +34,8 @@ class EdgeRelationType(str, enum.Enum):
     SOURCE_QUOTED_IN = "source_quoted_in"
     CAPTURED_FOR = "captured_for"
     ACCOUNT_FUNDS_GOAL = "account_funds_goal"  # Finance Module (Section 2.3)
+    OBLIGATION_CHARGES_ACCOUNT = "obligation_charges_account"  # F2.6: obligation → account
+    OBLIGATION_IMPACTS_GOAL = "obligation_impacts_goal"  # F2.6: obligation → goal
 
 
 class EdgeOrigin(str, enum.Enum):
@@ -331,3 +334,133 @@ class TransactionChangeType(str, enum.Enum):
     CREATE = "create"
     UPDATE = "update"
     VOID = "void"
+
+
+# =============================================================================
+# Finance Phase F2 enums (Finance Design Rev 3 + Obligations Addendum)
+# =============================================================================
+
+
+class InvestmentAssetType(str, enum.Enum):
+    """Section 3.3: Asset types for investment holdings."""
+    STOCK = "stock"
+    ETF = "etf"
+    MUTUAL_FUND = "mutual_fund"
+    BOND = "bond"
+    CRYPTO = "crypto"
+    OPTION = "option"
+    OTHER = "other"
+
+
+class InvestmentTransactionType(str, enum.Enum):
+    """Section 3.4: Investment transaction types."""
+    BUY = "buy"
+    SELL = "sell"
+    DIVIDEND_REINVEST = "dividend_reinvest"
+    SPLIT = "split"
+    MERGER = "merger"
+    SPINOFF = "spinoff"
+
+
+class ValuationSource(str, enum.Enum):
+    """Section 3.3: How a holding's valuation was determined."""
+    MARKET_API = "market_api"
+    MANUAL = "manual"
+    COMPUTED = "computed"
+
+
+class ObligationType(str, enum.Enum):
+    """Obligations Addendum Section 2: Obligation category types."""
+    SUBSCRIPTION = "subscription"
+    UTILITY = "utility"
+    RENT = "rent"
+    LOAN = "loan"
+    INSURANCE = "insurance"
+    TAX = "tax"
+    MEMBERSHIP = "membership"
+    OTHER = "other"
+
+
+class AmountModel(str, enum.Enum):
+    """Obligations Addendum Section 2: How the obligation amount behaves."""
+    FIXED = "fixed"
+    VARIABLE = "variable"
+    SEASONAL = "seasonal"
+
+
+class ObligationStatus(str, enum.Enum):
+    """Obligations Addendum Section 2: Obligation lifecycle status."""
+    ACTIVE = "active"
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
+
+
+class ObligationOrigin(str, enum.Enum):
+    """Obligations Addendum Section 2: How the obligation was created."""
+    MANUAL = "manual"
+    DETECTED = "detected"
+
+
+class BreakdownComponentType(str, enum.Enum):
+    """Obligations Addendum Section 2: Breakdown component types."""
+    BASE = "base"
+    USAGE = "usage"
+    TAX = "tax"
+    FEE = "fee"
+    DISCOUNT = "discount"
+    ADJUSTMENT = "adjustment"
+    OTHER = "other"
+
+
+class BreakdownAmountModel(str, enum.Enum):
+    """Obligations Addendum Section 2: Breakdown amount model (extends AmountModel with percentage)."""
+    FIXED = "fixed"
+    VARIABLE = "variable"
+    SEASONAL = "seasonal"
+    PERCENTAGE = "percentage"
+
+
+class BreakdownStatus(str, enum.Enum):
+    """Obligations Addendum Section 2: Breakdown version status."""
+    ACTIVE = "active"
+    DEPRECATED = "deprecated"
+
+
+class AlertType(str, enum.Enum):
+    """Section 5.1 + Obligations Addendum Section 5: Finance alert taxonomy."""
+    # Rule-based (F2.4)
+    LOW_CASH_RUNWAY = "low_cash_runway"
+    LARGE_TRANSACTION = "large_transaction"
+    UNCATEGORIZED_AGING = "uncategorized_aging"
+    DUPLICATE_IMPORT = "duplicate_import"
+    STALE_PENDING = "stale_pending"
+    GOAL_OFF_TRACK = "goal_off_track"
+    UNRECONCILED_DIVERGENCE = "unreconciled_divergence"
+    BROKEN_TRANSFER = "broken_transfer"
+    # Rule-based obligation alerts (F2.6)
+    UPCOMING_OBLIGATION = "upcoming_obligation"
+    MISSED_OBLIGATION = "missed_obligation"
+    OBLIGATION_AMOUNT_SPIKE = "obligation_amount_spike"
+    OBLIGATION_RATE_CHANGE = "obligation_rate_change"
+    OBLIGATION_EXPIRING = "obligation_expiring"
+
+
+class AlertSeverity(str, enum.Enum):
+    """Section 5.1: Finance alert severity levels."""
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class AlertStatus(str, enum.Enum):
+    """Section 5.1: Finance alert lifecycle status."""
+    ACTIVE = "active"
+    DISMISSED = "dismissed"
+    SNOOZED = "snoozed"
+    RESOLVED = "resolved"
+
+
+class PortfolioRollupPeriodType(str, enum.Enum):
+    """Section 4.8: Portfolio rollup period granularity."""
+    DAILY = "daily"
+    MONTHLY = "monthly"
