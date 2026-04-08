@@ -344,6 +344,42 @@ def _apply_ranking_and_caps(
     return all_items, final_sections
 
 
+async def _get_resurfaced_decisions(
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+) -> list[TodayItem]:
+    """
+    Phase PB: Get resurfaced decisions for Today View.
+    Section 5.7: Decision resurfacing — query at load time.
+    """
+    from server.app.behavioral.decision_resurfacing import get_decisions_for_resurfacing
+
+    result = await get_decisions_for_resurfacing(db, owner_id, limit=3)
+
+    items = []
+    for decision in result.items:
+        reason_labels = {
+            "review_due": "Review scheduled",
+            "no_outcome_7d": "7 days without outcome",
+            "no_outcome_30d": "30 days without outcome",
+            "no_outcome_90d": "90 days without outcome",
+        }
+        items.append(TodayItem(
+            section="resurfaced",
+            item_type="decision_resurfacing",
+            node_id=decision.node_id,
+            title=decision.title,
+            subtitle=reason_labels.get(decision.resurfacing_reason, "Needs review"),
+            is_unsolicited=True,
+            metadata={
+                "resurfacing_reason": decision.resurfacing_reason,
+                "days_since_creation": decision.days_since_creation,
+                "has_outcome_edges": decision.has_outcome_edges,
+            },
+        ))
+    return items
+
+
 async def _get_planned_focus_tasks(
     db: AsyncSession,
     owner_id: uuid.UUID,
@@ -425,14 +461,18 @@ async def assemble_today_view(
     # Phase 6: Cleanup prompts (Section 5.6)
     cleanup_prompts = await _get_cleanup_prompts(db, owner_id)
 
+    # Phase PB: Decision resurfacing items in Today View
+    resurfaced_items = await _get_resurfaced_decisions(db, owner_id)
+
     # Build sections dict
     sections: dict[str, list[TodayItem]] = {
         "focus": focus_items,
         "due": due_items,
         "goal_nudges": goal_nudges,
         "review": cleanup_prompts,  # Phase 6: cleanup prompts in review section
+        "resurfaced": resurfaced_items,  # Phase PB: decision resurfacing
         "journal": journal_prompt,
-        # Future phases will add: habits, learning, resurfaced
+        # Future phases will add: habits, learning
     }
 
     # Apply ranking and caps

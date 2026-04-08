@@ -29,6 +29,8 @@ from server.app.behavioral.cleanup_session import (
     cleanup_action_archive,
     cleanup_action_snooze,
     cleanup_action_keep,
+    cleanup_action_convert,
+    cleanup_action_reassign,
 )
 
 router = APIRouter(prefix="/api/cleanup", tags=["cleanup"])
@@ -80,16 +82,24 @@ class CleanupActionRequest(BaseModel):
     """
     Section 5.6: Cleanup action request.
     Supports batch operations on multiple nodes.
+    Phase PB: Added convert and reassign actions.
     """
-    action: Literal["archive", "snooze", "keep"]
+    action: Literal["archive", "snooze", "keep", "convert", "reassign"]
     node_ids: list[str]
     snoozed_until: datetime | None = None  # Required for "snooze" action
+    # Phase PB: Convert action fields
+    target_type: str | None = None  # Required for "convert" action
+    # Phase PB: Reassign action fields
+    target_project_id: str | None = None  # For "reassign" action
+    target_goal_id: str | None = None  # For "reassign" action
 
 
 class CleanupActionResponse(BaseModel):
     action: str
     affected_node_ids: list[str]
     total_affected: int
+    # Phase PB: Additional details for convert/reassign
+    details: dict | None = None
 
 
 # =============================================================================
@@ -166,6 +176,8 @@ async def execute_cleanup_action(
     """
     node_ids = [uuid.UUID(nid) for nid in req.node_ids]
 
+    details = None
+
     if req.action == "archive":
         affected = await cleanup_action_archive(db, user.id, node_ids)
     elif req.action == "snooze":
@@ -174,6 +186,32 @@ async def execute_cleanup_action(
         affected = await cleanup_action_snooze(db, user.id, node_ids, req.snoozed_until)
     elif req.action == "keep":
         affected = await cleanup_action_keep(db, user.id, node_ids)
+    elif req.action == "convert":
+        # Phase PB: Convert stale node to different type
+        if req.target_type is None:
+            raise HTTPException(status_code=400, detail="target_type is required for convert action")
+        if len(node_ids) != 1:
+            raise HTTPException(status_code=400, detail="Convert action only supports one node at a time")
+        try:
+            result = await cleanup_action_convert(db, user.id, node_ids[0], req.target_type)
+            affected = [node_ids[0]]
+            details = result
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    elif req.action == "reassign":
+        # Phase PB: Reassign stale node to project/goal
+        if len(node_ids) != 1:
+            raise HTTPException(status_code=400, detail="Reassign action only supports one node at a time")
+        try:
+            result = await cleanup_action_reassign(
+                db, user.id, node_ids[0],
+                target_project_id=uuid.UUID(req.target_project_id) if req.target_project_id else None,
+                target_goal_id=uuid.UUID(req.target_goal_id) if req.target_goal_id else None,
+            )
+            affected = [node_ids[0]]
+            details = result
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     else:
         raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
 
@@ -181,4 +219,5 @@ async def execute_cleanup_action(
         action=req.action,
         affected_node_ids=[str(nid) for nid in affected],
         total_affected=len(affected),
+        details=details,
     )

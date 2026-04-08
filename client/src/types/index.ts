@@ -1138,3 +1138,92 @@ export interface RollupComputeResponse {
   start_date: string;
   end_date: string;
 }
+
+// =============================================================================
+// Phase PB: Decision Resurfacing + Edge Weights + Depth
+// =============================================================================
+
+// Decision resurfacing (Section 5.7)
+export interface ResurfacedDecisionResponse {
+  node_id: string;
+  title: string;
+  content: string;
+  context: string | null;
+  review_at: string | null;
+  created_at: string;
+  resurfacing_reason: string; // "review_due", "no_outcome_7d", "no_outcome_30d", "no_outcome_90d"
+  days_since_creation: number;
+  has_outcome_edges: boolean;
+  explanation: DerivedExplanation;
+  tags: string[];
+}
+
+export interface DecisionResurfacingResponse {
+  items: ResurfacedDecisionResponse[];
+  total_count: number;
+  review_due_count: number;
+  no_outcome_count: number;
+}
+
+// Memory contextual surfacing (Section 4.5)
+export interface SurfacedMemoryResponse {
+  node_id: string;
+  title: string;
+  memory_type: string;
+  content_preview: string;
+  context: string | null;
+  review_at: string | null;
+  source: string; // "graph" or "embedding"
+  relation_type: string | null;
+  edge_id: string | null;
+  similarity: number | null;
+  is_suggested: boolean;
+  label: string | null;
+  tags: string[];
+}
+
+export interface MemorySurfacingResponse {
+  explicit: SurfacedMemoryResponse[];
+  suggested: SurfacedMemoryResponse[];
+  total_count: number;
+  node_id: string;
+}
+
+// Focus session stats (Phase PB: deepened focus mode)
+export interface FocusStatsResponse {
+  period_days: number;
+  total_sessions: number;
+  total_seconds: number;
+  avg_session_seconds: number;
+  longest_session_seconds: number;
+  daily_breakdown: {
+    date: string;
+    sessions: number;
+    seconds: number;
+  }[];
+  task_breakdown: {
+    task_id: string;
+    title: string;
+    sessions: number;
+    total_seconds: number;
+  }[];
+}
+
+// Cleanup action (Phase PB: enhanced with convert/reassign)
+export type CleanupActionPB = 'archive' | 'snooze' | 'keep' | 'convert' | 'reassign';
+
+export interface CleanupActionRequestPB {
+  action: CleanupActionPB;
+  node_ids: string[];
+  snoozed_until?: string;
+  target_type?: string; // For convert
+  target_project_id?: string; // For reassign
+  target_goal_id?: string; // For reassign
+}
+
+export interface CleanupActionResponsePB {
+  action: string;
+  affected_node_ids: string[];
+  total_affected: number;
+  details?: Record<string, unknown>;
+}

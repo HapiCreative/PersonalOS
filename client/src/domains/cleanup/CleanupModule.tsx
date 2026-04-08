@@ -18,9 +18,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { tokens } from '../../styles/tokens';
-import { cleanupApi } from '../../api/endpoints';
+import { cleanupApi, cleanupPBApi, goalsApi, projectsApi } from '../../api/endpoints';
 import { DerivedExplanationDisplay } from '../../components/derived/DerivedExplanationDisplay';
-import type { CleanupQueueResponse, StaleItemResponse, CleanupAction } from '../../types';
+import type { CleanupQueueResponse, StaleItemResponse, CleanupAction, GoalResponse, ProjectResponse } from '../../types';
 
 const CATEGORY_LABELS: Record<string, string> = {
   task_todo: 'Stale Tasks (Todo)',
@@ -53,6 +53,14 @@ export function CleanupModule({ onNavigate }: CleanupModuleProps) {
   const [actionLoading, setActionLoading] = useState(false);
   const [snoozeNodeId, setSnoozeNodeId] = useState<string | null>(null);
   const [snoozeDate, setSnoozeDate] = useState('');
+  // Phase PB: Convert and reassign modals
+  const [convertNodeId, setConvertNodeId] = useState<string | null>(null);
+  const [convertType, setConvertType] = useState('memory');
+  const [reassignNodeId, setReassignNodeId] = useState<string | null>(null);
+  const [goals, setGoals] = useState<GoalResponse[]>([]);
+  const [projects, setProjects] = useState<ProjectResponse[]>([]);
+  const [selectedGoalId, setSelectedGoalId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
 
   const fetchQueue = useCallback(async () => {
     setLoading(true);
@@ -99,6 +107,64 @@ export function CleanupModule({ onNavigate }: CleanupModuleProps) {
     await handleAction('snooze', [snoozeNodeId], new Date(snoozeDate).toISOString());
     setSnoozeNodeId(null);
     setSnoozeDate('');
+  };
+
+  // Phase PB: Convert action
+  const handleConvert = async () => {
+    if (!convertNodeId || !convertType) return;
+    setActionLoading(true);
+    try {
+      await cleanupPBApi.executeAction({
+        action: 'convert',
+        node_ids: [convertNodeId],
+        target_type: convertType,
+      });
+      setConvertNodeId(null);
+      await fetchQueue();
+    } catch (e: any) {
+      setError(e.message || 'Failed to convert');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Phase PB: Reassign action
+  const handleReassign = async () => {
+    if (!reassignNodeId) return;
+    if (!selectedGoalId && !selectedProjectId) return;
+    setActionLoading(true);
+    try {
+      await cleanupPBApi.executeAction({
+        action: 'reassign',
+        node_ids: [reassignNodeId],
+        target_goal_id: selectedGoalId || undefined,
+        target_project_id: selectedProjectId || undefined,
+      });
+      setReassignNodeId(null);
+      setSelectedGoalId('');
+      setSelectedProjectId('');
+      await fetchQueue();
+    } catch (e: any) {
+      setError(e.message || 'Failed to reassign');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Phase PB: Load goals/projects for reassign modal
+  const openReassignModal = async (nodeId: string) => {
+    setReassignNodeId(nodeId);
+    try {
+      const [goalResult, projectResult] = await Promise.all([
+        goalsApi.list({ status: 'active' }),
+        projectsApi.list({ status: 'active' }),
+      ]);
+      setGoals(goalResult.items);
+      setProjects(projectResult.items);
+    } catch {
+      setGoals([]);
+      setProjects([]);
+    }
   };
 
   const toggleSelect = (id: string) => {
@@ -232,6 +298,8 @@ export function CleanupModule({ onNavigate }: CleanupModuleProps) {
                   setSnoozeNodeId(item.node_id);
                   setSnoozeDate('');
                 }}
+                onConvert={() => { setConvertNodeId(item.node_id); setConvertType('memory'); }}
+                onReassign={() => openReassignModal(item.node_id)}
                 actionLoading={actionLoading}
               />
             ))}
@@ -290,6 +358,94 @@ export function CleanupModule({ onNavigate }: CleanupModuleProps) {
             </div>
           </div>
         )}
+        {/* Phase PB: Convert modal */}
+        {convertNodeId && (
+          <div style={styles.snoozeOverlay}>
+            <div style={styles.snoozeModal}>
+              <h3 style={styles.snoozeTitle}>Convert to</h3>
+              <select
+                value={convertType}
+                onChange={(e) => setConvertType(e.target.value)}
+                style={styles.snoozeDateInput}
+              >
+                <option value="memory">Memory (Lesson)</option>
+                <option value="kb_entry">KB Entry</option>
+              </select>
+              <div style={styles.snoozeActions}>
+                <button
+                  onClick={() => setConvertNodeId(null)}
+                  style={styles.snoozeCancelButton}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConvert}
+                  disabled={actionLoading}
+                  style={styles.snoozeConfirmButton}
+                >
+                  Convert
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Phase PB: Reassign modal */}
+        {reassignNodeId && (
+          <div style={styles.snoozeOverlay}>
+            <div style={styles.snoozeModal}>
+              <h3 style={styles.snoozeTitle}>Reassign to</h3>
+              {projects.length > 0 && (
+                <div>
+                  <label style={styles.reassignLabel}>Project</label>
+                  <select
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    style={styles.snoozeDateInput}
+                  >
+                    <option value="">None</option>
+                    {projects.map((p) => (
+                      <option key={p.node_id} value={p.node_id}>{p.title}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {goals.length > 0 && (
+                <div>
+                  <label style={styles.reassignLabel}>Goal</label>
+                  <select
+                    value={selectedGoalId}
+                    onChange={(e) => setSelectedGoalId(e.target.value)}
+                    style={styles.snoozeDateInput}
+                  >
+                    <option value="">None</option>
+                    {goals.map((g) => (
+                      <option key={g.node_id} value={g.node_id}>{g.title}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div style={styles.snoozeActions}>
+                <button
+                  onClick={() => { setReassignNodeId(null); setSelectedGoalId(''); setSelectedProjectId(''); }}
+                  style={styles.snoozeCancelButton}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReassign}
+                  disabled={actionLoading || (!selectedGoalId && !selectedProjectId)}
+                  style={{
+                    ...styles.snoozeConfirmButton,
+                    opacity: (!selectedGoalId && !selectedProjectId) ? 0.5 : 1,
+                  }}
+                >
+                  Reassign
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -302,6 +458,8 @@ function CleanupCard({
   onArchive,
   onKeep,
   onSnooze,
+  onConvert,
+  onReassign,
   actionLoading,
 }: {
   item: StaleItemResponse;
@@ -310,6 +468,8 @@ function CleanupCard({
   onArchive: () => void;
   onKeep: () => void;
   onSnooze: () => void;
+  onConvert: () => void;
+  onReassign: () => void;
   actionLoading: boolean;
 }) {
   const categoryColor = CATEGORY_COLORS[item.stale_category] || tokens.colors.warning;
@@ -368,6 +528,22 @@ function CleanupCard({
           title="Snooze"
         >
           Snooze
+        </button>
+        <button
+          onClick={onConvert}
+          disabled={actionLoading}
+          style={styles.actionButton}
+          title="Convert to different type"
+        >
+          Convert
+        </button>
+        <button
+          onClick={onReassign}
+          disabled={actionLoading}
+          style={styles.actionButton}
+          title="Reassign to project/goal"
+        >
+          Reassign
         </button>
         <button
           onClick={onKeep}
@@ -702,6 +878,14 @@ const styles: Record<string, React.CSSProperties> = {
     color: tokens.colors.textMuted,
     background: 'none',
     cursor: 'pointer',
+  },
+  reassignLabel: {
+    fontFamily: tokens.fonts.mono,
+    fontSize: 11,
+    color: tokens.colors.textMuted,
+    display: 'block',
+    marginBottom: 4,
+    marginTop: 8,
   },
   snoozeConfirmButton: {
     padding: '6px 14px',

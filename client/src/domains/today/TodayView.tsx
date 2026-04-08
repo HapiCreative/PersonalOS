@@ -17,6 +17,7 @@ import type { TodayViewResponse, TodaySectionResponse, TodayItemResponse } from 
 import { MorningCommit } from './MorningCommit';
 import { FocusMode } from './FocusMode';
 import { EveningReflection } from './EveningReflection';
+import { DecisionResurfacing } from './DecisionResurfacing';
 
 const SECTION_LABELS: Record<string, string> = {
   focus: 'In Focus',
@@ -238,6 +239,11 @@ export function TodayView({ onNavigate }: TodayViewProps) {
             ))}
           </div>
         )}
+
+        {/* Phase PB: Decision Resurfacing — standalone section */}
+        <DecisionResurfacing
+          onNavigate={(nodeId) => onNavigate?.('memory')}
+        />
       </div>
     </div>
   );
@@ -275,6 +281,8 @@ function TodayItemCard({ item, onNavigate }: { item: TodayItemResponse; onNaviga
       onNavigate('journal');
     } else if (item.item_type === 'cleanup_prompt') {
       onNavigate('cleanup');
+    } else if (item.item_type === 'decision_resurfacing') {
+      onNavigate('memory');
     }
   };
 
@@ -291,6 +299,7 @@ function TodayItemCard({ item, onNavigate }: { item: TodayItemResponse; onNaviga
           : item.item_type === 'goal_nudge' ? tokens.colors.violet
           : item.item_type === 'journal_prompt' ? tokens.colors.accent
           : item.item_type === 'cleanup_prompt' ? tokens.colors.warning
+          : item.item_type === 'decision_resurfacing' ? tokens.colors.violet
           : tokens.colors.border,
       }}
     >

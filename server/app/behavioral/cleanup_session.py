@@ -162,3 +162,158 @@ async def cleanup_action_keep(
         if row:
             kept.append(row)
     return kept
+
+
+# =============================================================================
+# Phase PB: Enhanced cleanup actions
+# =============================================================================
+
+
+async def cleanup_action_convert(
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+    node_id: uuid.UUID,
+    target_type: str,
+) -> dict:
+    """
+    Phase PB: Cleanup system enhancement — Convert action.
+    Converts a stale node to a different type (e.g., stale task -> memory).
+
+    This is effectively creating a new node of the target type and
+    archiving the original, preserving the provenance link.
+    """
+    from server.app.core.models.enums import NodeType, EdgeRelationType, EdgeOrigin, MemoryType
+
+    # Get original node
+    from sqlalchemy import select as sa_select
+    stmt = sa_select(Node).where(Node.id == node_id, Node.owner_id == owner_id)
+    result = await db.execute(stmt)
+    original = result.scalar_one_or_none()
+    if original is None:
+        raise ValueError(f"Node {node_id} not found or not owned by user")
+
+    # Create new node of target type
+    new_node = Node(
+        type=NodeType(target_type),
+        owner_id=owner_id,
+        title=original.title,
+        summary=original.summary,
+    )
+    db.add(new_node)
+    await db.flush()
+
+    # Create companion table record based on target type
+    if target_type == "memory":
+        from server.app.core.models.node import MemoryNode
+        memory = MemoryNode(
+            node_id=new_node.id,
+            memory_type=MemoryType.LESSON,
+            content=original.summary or original.title,
+            tags=[],
+        )
+        db.add(memory)
+        await db.flush()
+
+    # Create provenance edge (semantic_reference from new to old)
+    from server.app.core.models.edge import Edge
+    edge = Edge(
+        source_id=new_node.id,
+        target_id=original.id,
+        relation_type=EdgeRelationType.SEMANTIC_REFERENCE,
+        origin=EdgeOrigin.SYSTEM,
+    )
+    db.add(edge)
+
+    # Archive the original
+    now = datetime.now(timezone.utc)
+    original.archived_at = now
+
+    await db.flush()
+
+    return {
+        "original_node_id": str(node_id),
+        "new_node_id": str(new_node.id),
+        "target_type": target_type,
+        "archived_original": True,
+    }
+
+
+async def cleanup_action_reassign(
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+    node_id: uuid.UUID,
+    target_project_id: uuid.UUID | None = None,
+    target_goal_id: uuid.UUID | None = None,
+) -> dict:
+    """
+    Phase PB: Cleanup system enhancement — Reassign action.
+    Reassigns a stale node to a different project or goal.
+    Creates belongs_to or goal_tracks_task edges as appropriate.
+    """
+    from server.app.core.models.enums import EdgeRelationType, EdgeOrigin, NodeType
+    from server.app.core.models.edge import Edge
+    from sqlalchemy import select as sa_select
+
+    # Get original node
+    stmt = sa_select(Node).where(Node.id == node_id, Node.owner_id == owner_id)
+    result = await db.execute(stmt)
+    original = result.scalar_one_or_none()
+    if original is None:
+        raise ValueError(f"Node {node_id} not found or not owned by user")
+
+    edges_created = []
+    now = datetime.now(timezone.utc)
+
+    if target_project_id:
+        # Verify project exists and is owned by user
+        proj_stmt = sa_select(Node).where(
+            Node.id == target_project_id,
+            Node.owner_id == owner_id,
+            Node.type == NodeType.PROJECT,
+        )
+        proj_result = await db.execute(proj_stmt)
+        if proj_result.scalar_one_or_none() is None:
+            raise ValueError(f"Project {target_project_id} not found")
+
+        # Create belongs_to edge
+        edge = Edge(
+            source_id=node_id,
+            target_id=target_project_id,
+            relation_type=EdgeRelationType.BELONGS_TO,
+            origin=EdgeOrigin.USER,
+        )
+        db.add(edge)
+        edges_created.append(str(edge.id))
+
+    if target_goal_id:
+        # Verify goal exists and is owned by user
+        goal_stmt = sa_select(Node).where(
+            Node.id == target_goal_id,
+            Node.owner_id == owner_id,
+            Node.type == NodeType.GOAL,
+        )
+        goal_result = await db.execute(goal_stmt)
+        if goal_result.scalar_one_or_none() is None:
+            raise ValueError(f"Goal {target_goal_id} not found")
+
+        # Create goal_tracks_task edge (goal -> task)
+        if original.type == NodeType.TASK:
+            edge = Edge(
+                source_id=target_goal_id,
+                target_id=node_id,
+                relation_type=EdgeRelationType.GOAL_TRACKS_TASK,
+                origin=EdgeOrigin.USER,
+            )
+            db.add(edge)
+            edges_created.append(str(edge.id))
+
+    # Touch the node to reset staleness
+    original.updated_at = now
+    await db.flush()
+
+    return {
+        "node_id": str(node_id),
+        "target_project_id": str(target_project_id) if target_project_id else None,
+        "target_goal_id": str(target_goal_id) if target_goal_id else None,
+        "edges_created": edges_created,
+    }

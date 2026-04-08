@@ -183,3 +183,104 @@ async def get_focus_time_for_date(
     )
     result = await db.execute(stmt)
     return result.scalar_one()
+
+
+# =============================================================================
+# Phase PB: Focus mode deepening — session tracking + stats
+# =============================================================================
+
+
+async def get_focus_stats(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    task_id: uuid.UUID | None = None,
+    days: int = 7,
+) -> dict:
+    """
+    Phase PB: Get focus session statistics for deeper session tracking.
+    Returns stats over the last N days, optionally scoped to a task.
+    """
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=days)
+
+    base_filter = [
+        FocusSession.user_id == user_id,
+        FocusSession.started_at >= start,
+        FocusSession.ended_at.isnot(None),
+    ]
+    if task_id:
+        base_filter.append(FocusSession.task_id == task_id)
+
+    # Total sessions and time
+    total_stmt = (
+        select(
+            func.count().label("total_sessions"),
+            func.coalesce(func.sum(FocusSession.duration), 0).label("total_seconds"),
+            func.coalesce(func.avg(FocusSession.duration), 0).label("avg_seconds"),
+            func.max(FocusSession.duration).label("longest_session"),
+        )
+        .where(*base_filter)
+    )
+    result = await db.execute(total_stmt)
+    row = result.one()
+
+    # Sessions per day breakdown
+    daily_stmt = (
+        select(
+            func.date_trunc('day', FocusSession.started_at).label("day"),
+            func.count().label("sessions"),
+            func.coalesce(func.sum(FocusSession.duration), 0).label("seconds"),
+        )
+        .where(*base_filter)
+        .group_by(func.date_trunc('day', FocusSession.started_at))
+        .order_by(func.date_trunc('day', FocusSession.started_at))
+    )
+    daily_result = await db.execute(daily_stmt)
+    daily_rows = list(daily_result.all())
+
+    # Task-level breakdown (when no task_id filter)
+    task_breakdown = []
+    if not task_id:
+        task_stmt = (
+            select(
+                FocusSession.task_id,
+                func.count().label("sessions"),
+                func.coalesce(func.sum(FocusSession.duration), 0).label("seconds"),
+            )
+            .where(*base_filter)
+            .group_by(FocusSession.task_id)
+            .order_by(func.sum(FocusSession.duration).desc())
+            .limit(10)
+        )
+        task_result = await db.execute(task_stmt)
+        for tid, sessions, seconds in task_result.all():
+            # Fetch task title
+            task_node = await db.execute(
+                select(Node).where(Node.id == tid)
+            )
+            tnode = task_node.scalar_one_or_none()
+            task_breakdown.append({
+                "task_id": str(tid),
+                "title": tnode.title if tnode else "Unknown",
+                "sessions": sessions,
+                "total_seconds": seconds,
+            })
+
+    return {
+        "period_days": days,
+        "total_sessions": row.total_sessions,
+        "total_seconds": row.total_seconds,
+        "avg_session_seconds": round(float(row.avg_seconds)),
+        "longest_session_seconds": row.longest_session or 0,
+        "daily_breakdown": [
+            {
+                "date": d.isoformat() if hasattr(d, 'isoformat') else str(d),
+                "sessions": s,
+                "seconds": sec,
+            }
+            for d, s, sec in daily_rows
+        ],
+        "task_breakdown": task_breakdown,
+    }

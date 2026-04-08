@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { tokens } from '../../styles/tokens';
-import { edgesApi, searchApi } from '../../api/endpoints';
+import { edgesApi, searchApi, edgeStateApi } from '../../api/endpoints';
 import type { EdgeResponse, EdgeRelationType, NodeResponse } from '../../types';
 
 const RELATION_LABELS: Record<EdgeRelationType, string> = {
@@ -42,6 +42,9 @@ export function EdgeChips({ nodeId }: EdgeChipsProps) {
   const [relationType, setRelationType] = useState<EdgeRelationType>('semantic_reference');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Phase PB: Edge weight editing
+  const [editingWeight, setEditingWeight] = useState<string | null>(null);
+  const [weightValue, setWeightValue] = useState('');
 
   const fetchEdges = useCallback(async () => {
     try {
@@ -98,6 +101,23 @@ export function EdgeChips({ nodeId }: EdgeChipsProps) {
       await edgesApi.delete(edgeId);
       fetchEdges();
     } catch {}
+  };
+
+  // Phase PB: Edge weight user override
+  const handleWeightUpdate = async (edgeId: string) => {
+    const w = parseFloat(weightValue);
+    if (isNaN(w) || w < 0 || w > 1) {
+      setError('Weight must be between 0.0 and 1.0');
+      return;
+    }
+    try {
+      await edgeStateApi.updateWeight(edgeId, w);
+      setEditingWeight(null);
+      setWeightValue('');
+      fetchEdges();
+    } catch (e: any) {
+      setError(e.message || 'Failed to update weight');
+    }
   };
 
   return (
@@ -163,6 +183,34 @@ export function EdgeChips({ nodeId }: EdgeChipsProps) {
             {edge.origin !== 'user' && (
               <span style={styles.chipOrigin}>{edge.origin}</span>
             )}
+            {/* Phase PB: Weight display + edit */}
+            {editingWeight === edge.id ? (
+              <span style={styles.weightEdit}>
+                <input
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={weightValue}
+                  onChange={(e) => setWeightValue(e.target.value)}
+                  style={styles.weightInput}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleWeightUpdate(edge.id);
+                    if (e.key === 'Escape') { setEditingWeight(null); setWeightValue(''); }
+                  }}
+                />
+                <button onClick={() => handleWeightUpdate(edge.id)} style={styles.weightSave}>✓</button>
+              </span>
+            ) : (
+              <button
+                onClick={() => { setEditingWeight(edge.id); setWeightValue(String(edge.weight)); }}
+                style={styles.chipWeight}
+                title="Click to edit weight (Phase PB)"
+              >
+                w:{edge.weight.toFixed(1)}
+              </button>
+            )}
             <button onClick={() => handleDeleteEdge(edge.id)} style={styles.chipRemove}>×</button>
           </div>
         ))}
@@ -191,5 +239,9 @@ const styles: Record<string, React.CSSProperties> = {
   chipRelation: { fontFamily: tokens.fonts.mono, fontSize: 11, color: tokens.colors.accent },
   chipTarget: { fontFamily: tokens.fonts.mono, fontSize: 11, color: tokens.colors.text },
   chipOrigin: { fontFamily: tokens.fonts.mono, fontSize: 10, color: tokens.colors.violet, padding: '1px 4px', background: `${tokens.colors.violet}15`, borderRadius: '2px' },
+  chipWeight: { border: 'none', background: `${tokens.colors.accent}10`, color: tokens.colors.accent, cursor: 'pointer', fontFamily: tokens.fonts.mono, fontSize: 10, padding: '1px 4px', borderRadius: '2px' },
+  weightEdit: { display: 'flex', alignItems: 'center', gap: 2 },
+  weightInput: { width: 40, fontFamily: tokens.fonts.mono, fontSize: 10, padding: '1px 3px', border: `1px solid ${tokens.colors.accent}`, borderRadius: '2px', background: tokens.colors.background, color: tokens.colors.text },
+  weightSave: { border: 'none', background: 'none', color: tokens.colors.success, cursor: 'pointer', fontSize: 12, padding: '0 2px' },
   chipRemove: { border: 'none', background: 'none', color: tokens.colors.textMuted, cursor: 'pointer', fontSize: 14, padding: '0 2px', lineHeight: 1 },
 };

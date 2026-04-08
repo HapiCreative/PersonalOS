@@ -1,20 +1,26 @@
 /**
- * Focus Mode UI (Section 5.1 — Phase 7).
+ * Focus Mode UI (Section 5.1 — Phase 7 + Phase PB enhancements).
  * Execute stage of the 4-stage daily cycle.
  *
  * Shows only selected priorities from daily plan.
  * Optional timer + session tracking -> focus_sessions record.
+ *
+ * Phase PB enhancements:
+ * - Session tracking: history of focus sessions with stats
+ * - Contextual scoping: related context for the focused task
  *
  * Invariant T-02: Focus sessions are append-only (no deletes).
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { tokens } from '../../styles/tokens';
-import { focusSessionsApi, dailyPlansApi } from '../../api/endpoints';
+import { focusSessionsApi, dailyPlansApi, focusStatsApi, derivedApi } from '../../api/endpoints';
 import type {
   DailyPlanResponse,
   FocusSessionResponse,
   TaskResponse,
+  FocusStatsResponse,
+  ContextLayerResponse,
 } from '../../types';
 import { tasksApi } from '../../api/endpoints';
 
@@ -28,6 +34,11 @@ export function FocusMode({ onExit }: FocusModeProps) {
   const [activeSession, setActiveSession] = useState<FocusSessionResponse | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [loading, setLoading] = useState(true);
+  // Phase PB: Focus stats and context
+  const [stats, setStats] = useState<FocusStatsResponse | null>(null);
+  const [context, setContext] = useState<ContextLayerResponse | null>(null);
+  const [showStats, setShowStats] = useState(false);
+  const [showContext, setShowContext] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -54,6 +65,14 @@ export function FocusMode({ onExit }: FocusModeProps) {
         const start = new Date(sessionResult.started_at).getTime();
         setElapsed(Math.floor((Date.now() - start) / 1000));
       }
+
+      // Phase PB: Fetch focus stats
+      try {
+        const statsResult = await focusStatsApi.getStats({ days: 7 });
+        setStats(statsResult);
+      } catch {
+        // Stats are optional
+      }
     } catch {
       // Silently fail — will show empty state
     } finally {
@@ -78,6 +97,16 @@ export function FocusMode({ onExit }: FocusModeProps) {
     };
   }, [activeSession]);
 
+  // Phase PB: Fetch context for active task
+  useEffect(() => {
+    const taskId = activeSession?.task_id;
+    if (taskId && showContext) {
+      derivedApi.getContextLayer(taskId)
+        .then(setContext)
+        .catch(() => setContext(null));
+    }
+  }, [activeSession?.task_id, showContext]);
+
   const startSession = async (taskId: string) => {
     try {
       const session = await focusSessionsApi.start(taskId);
@@ -91,11 +120,11 @@ export function FocusMode({ onExit }: FocusModeProps) {
   const endSession = async () => {
     if (!activeSession) return;
     try {
-      const ended = await focusSessionsApi.end(activeSession.id);
+      await focusSessionsApi.end(activeSession.id);
       setActiveSession(null);
       setElapsed(0);
+      setContext(null);
       if (timerRef.current) clearInterval(timerRef.current);
-      // Refresh to show updated state
       fetchData();
     } catch (e: any) {
       console.error('Failed to end focus session:', e);
@@ -108,6 +137,14 @@ export function FocusMode({ onExit }: FocusModeProps) {
     const s = seconds % 60;
     if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const formatDuration = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`;
+    const m = Math.floor(seconds / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
   };
 
   if (loading) {
@@ -127,9 +164,20 @@ export function FocusMode({ onExit }: FocusModeProps) {
         <div style={styles.header}>
           <div style={styles.headerRow}>
             <h2 style={styles.heading}>Focus Mode</h2>
-            <button onClick={onExit} style={styles.exitButton}>
-              Exit Focus
-            </button>
+            <div style={styles.headerActions}>
+              <button
+                onClick={() => setShowStats(!showStats)}
+                style={{
+                  ...styles.toggleButton,
+                  ...(showStats ? styles.toggleButtonActive : {}),
+                }}
+              >
+                Stats
+              </button>
+              <button onClick={onExit} style={styles.exitButton}>
+                Exit Focus
+              </button>
+            </div>
           </div>
           {plan?.intention_text && (
             <p style={styles.intention}>"{plan.intention_text}"</p>
@@ -144,9 +192,76 @@ export function FocusMode({ onExit }: FocusModeProps) {
               {tasks.find((t) => t.node_id === activeTaskId)?.title || 'Task'}
             </div>
             <div style={styles.timerDisplay}>{formatTime(elapsed)}</div>
-            <button onClick={endSession} style={styles.stopButton}>
-              Stop Session
-            </button>
+            <div style={styles.timerActions}>
+              <button onClick={endSession} style={styles.stopButton}>
+                Stop Session
+              </button>
+              <button
+                onClick={() => setShowContext(!showContext)}
+                style={{
+                  ...styles.contextToggle,
+                  ...(showContext ? styles.contextToggleActive : {}),
+                }}
+              >
+                {showContext ? 'Hide Context' : 'Show Context'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Phase PB: Contextual scoping — show related context for focused task */}
+        {showContext && context && context.total_count > 0 && (
+          <div style={styles.contextSection}>
+            <div style={styles.contextSectionTitle}>Related Context</div>
+            {context.categories.map((cat) => (
+              <div key={cat.name} style={styles.contextCategory}>
+                <div style={styles.contextCatLabel}>{cat.name.replace(/_/g, ' ')}</div>
+                {cat.items.map((item, idx) => (
+                  <div key={`${item.node_id}-${idx}`} style={styles.contextItem}>
+                    <span style={styles.contextItemType}>{item.node_type}</span>
+                    <span style={styles.contextItemTitle}>{item.title}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Phase PB: Focus session stats */}
+        {showStats && stats && (
+          <div style={styles.statsSection}>
+            <div style={styles.statsTitle}>Last 7 Days</div>
+            <div style={styles.statsGrid}>
+              <div style={styles.statCard}>
+                <span style={styles.statValue}>{stats.total_sessions}</span>
+                <span style={styles.statLabel}>Sessions</span>
+              </div>
+              <div style={styles.statCard}>
+                <span style={styles.statValue}>{formatDuration(stats.total_seconds)}</span>
+                <span style={styles.statLabel}>Total Time</span>
+              </div>
+              <div style={styles.statCard}>
+                <span style={styles.statValue}>{formatDuration(stats.avg_session_seconds)}</span>
+                <span style={styles.statLabel}>Avg Session</span>
+              </div>
+              <div style={styles.statCard}>
+                <span style={styles.statValue}>{formatDuration(stats.longest_session_seconds)}</span>
+                <span style={styles.statLabel}>Longest</span>
+              </div>
+            </div>
+            {stats.task_breakdown.length > 0 && (
+              <div style={styles.taskBreakdown}>
+                <div style={styles.breakdownTitle}>By Task</div>
+                {stats.task_breakdown.map((tb) => (
+                  <div key={tb.task_id} style={styles.breakdownRow}>
+                    <span style={styles.breakdownTask}>{tb.title}</span>
+                    <span style={styles.breakdownTime}>
+                      {tb.sessions}x &middot; {formatDuration(tb.total_seconds)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -190,7 +305,7 @@ export function FocusMode({ onExit }: FocusModeProps) {
                       </span>
                       <span style={styles.taskMeta}>
                         {task.priority} &middot; {task.status}
-                        {task.due_date && ` &middot; Due ${task.due_date}`}
+                        {task.due_date && ` \u00b7 Due ${task.due_date}`}
                       </span>
                     </div>
                     {!isDone && (
@@ -258,6 +373,25 @@ const styles: Record<string, React.CSSProperties> = {
     color: tokens.colors.text,
     margin: 0,
   },
+  headerActions: {
+    display: 'flex',
+    gap: 6,
+  },
+  toggleButton: {
+    padding: '6px 14px',
+    borderRadius: tokens.radius,
+    border: `1px solid ${tokens.colors.border}`,
+    fontFamily: tokens.fonts.mono,
+    fontSize: 11,
+    color: tokens.colors.textMuted,
+    cursor: 'pointer',
+    background: 'none',
+  },
+  toggleButtonActive: {
+    color: tokens.colors.accent,
+    borderColor: tokens.colors.accent,
+    background: `${tokens.colors.accent}10`,
+  },
   exitButton: {
     padding: '6px 14px',
     borderRadius: tokens.radius,
@@ -306,6 +440,11 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 16,
     letterSpacing: 2,
   },
+  timerActions: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: 10,
+  },
   stopButton: {
     padding: '8px 20px',
     borderRadius: tokens.radius,
@@ -315,6 +454,147 @@ const styles: Record<string, React.CSSProperties> = {
     color: tokens.colors.error,
     cursor: 'pointer',
     background: 'none',
+  },
+  contextToggle: {
+    padding: '8px 20px',
+    borderRadius: tokens.radius,
+    border: `1px solid ${tokens.colors.border}`,
+    fontFamily: tokens.fonts.sans,
+    fontSize: 13,
+    color: tokens.colors.textMuted,
+    cursor: 'pointer',
+    background: 'none',
+  },
+  contextToggleActive: {
+    color: tokens.colors.violet,
+    borderColor: tokens.colors.violet,
+    background: `${tokens.colors.violet}10`,
+  },
+  // Phase PB: Context section
+  contextSection: {
+    background: tokens.colors.surface,
+    border: `1px solid ${tokens.colors.border}`,
+    borderRadius: tokens.radius,
+    marginBottom: 16,
+    padding: '12px',
+  },
+  contextSectionTitle: {
+    fontFamily: tokens.fonts.sans,
+    fontWeight: 600,
+    fontSize: 12,
+    color: tokens.colors.violet,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    marginBottom: 8,
+  },
+  contextCategory: {
+    marginBottom: 6,
+  },
+  contextCatLabel: {
+    fontFamily: tokens.fonts.mono,
+    fontSize: 10,
+    color: tokens.colors.textMuted,
+    textTransform: 'capitalize' as const,
+    marginBottom: 3,
+  },
+  contextItem: {
+    display: 'flex',
+    gap: 6,
+    padding: '3px 0',
+    marginLeft: 8,
+  },
+  contextItemType: {
+    fontFamily: tokens.fonts.mono,
+    fontSize: 9,
+    color: tokens.colors.textMuted,
+    padding: '0 4px',
+    background: `${tokens.colors.textMuted}15`,
+    borderRadius: '2px',
+    flexShrink: 0,
+  },
+  contextItemTitle: {
+    fontFamily: tokens.fonts.sans,
+    fontSize: 12,
+    color: tokens.colors.text,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  // Phase PB: Stats section
+  statsSection: {
+    background: tokens.colors.surface,
+    border: `1px solid ${tokens.colors.border}`,
+    borderRadius: tokens.radius,
+    marginBottom: 16,
+    padding: '12px',
+  },
+  statsTitle: {
+    fontFamily: tokens.fonts.sans,
+    fontWeight: 600,
+    fontSize: 12,
+    color: tokens.colors.text,
+    marginBottom: 10,
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr 1fr',
+    gap: 8,
+    marginBottom: 12,
+  },
+  statCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 2,
+    padding: '8px 4px',
+    background: tokens.colors.background,
+    borderRadius: tokens.radius,
+    border: `1px solid ${tokens.colors.border}`,
+  },
+  statValue: {
+    fontFamily: tokens.fonts.mono,
+    fontSize: 14,
+    fontWeight: 600,
+    color: tokens.colors.accent,
+  },
+  statLabel: {
+    fontFamily: tokens.fonts.mono,
+    fontSize: 9,
+    color: tokens.colors.textMuted,
+    textTransform: 'uppercase' as const,
+  },
+  taskBreakdown: {
+    borderTop: `1px solid ${tokens.colors.border}`,
+    paddingTop: 8,
+  },
+  breakdownTitle: {
+    fontFamily: tokens.fonts.mono,
+    fontSize: 10,
+    color: tokens.colors.textMuted,
+    marginBottom: 6,
+    textTransform: 'uppercase' as const,
+  },
+  breakdownRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '3px 0',
+  },
+  breakdownTask: {
+    fontFamily: tokens.fonts.sans,
+    fontSize: 12,
+    color: tokens.colors.text,
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  breakdownTime: {
+    fontFamily: tokens.fonts.mono,
+    fontSize: 11,
+    color: tokens.colors.textMuted,
+    flexShrink: 0,
+    marginLeft: 8,
   },
   taskSection: {
     background: tokens.colors.surface,

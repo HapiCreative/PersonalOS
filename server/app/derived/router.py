@@ -37,6 +37,10 @@ from server.app.derived.context_layer import (
     assemble_context_layer,
     ContextItem,
 )
+from server.app.derived.memory_surfacing import (
+    surface_memories_for_node,
+    SurfacedMemory,
+)
 from server.app.derived.stale_detection import check_node_stale
 from server.app.derived.schemas import DerivedExplanation
 
@@ -460,4 +464,74 @@ async def get_context_layer(
         categories=categories,
         node_id=str(result.node_id),
         suppression_applied=result.suppression_applied,
+    )
+
+
+# =============================================================================
+# Memory Surfacing endpoints (Phase PB)
+# =============================================================================
+
+class SurfacedMemoryResponse(BaseModel):
+    """A memory surfaced via graph or embedding."""
+    node_id: str
+    title: str
+    memory_type: str
+    content_preview: str
+    context: str | None = None
+    review_at: str | None = None
+    source: str  # "graph" or "embedding"
+    relation_type: str | None = None
+    edge_id: str | None = None
+    similarity: float | None = None
+    is_suggested: bool = False
+    label: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class MemorySurfacingResponse(BaseModel):
+    """Section 4.5: Memory contextual surfacing result."""
+    explicit: list[SurfacedMemoryResponse]
+    suggested: list[SurfacedMemoryResponse]
+    total_count: int
+    node_id: str
+
+
+def _surfaced_memory_to_response(m: SurfacedMemory) -> SurfacedMemoryResponse:
+    return SurfacedMemoryResponse(
+        node_id=str(m.node_id),
+        title=m.title,
+        memory_type=m.memory_type,
+        content_preview=m.content_preview,
+        context=m.context,
+        review_at=m.review_at.isoformat() if m.review_at else None,
+        source=m.source,
+        relation_type=m.relation_type,
+        edge_id=m.edge_id,
+        similarity=m.similarity,
+        is_suggested=m.is_suggested,
+        label=m.label,
+        tags=m.tags,
+    )
+
+
+@router.get("/memories/{node_id}", response_model=MemorySurfacingResponse)
+async def get_memory_surfacing(
+    node_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase PB: Memory contextual surfacing.
+    Section 4.5: Graph traversal first, embedding second.
+
+    Stage 1: Explicit links via graph traversal (highest confidence, unlabeled)
+    Stage 2: Suggested links via embedding similarity (thresholded, labeled "Suggested")
+    """
+    result = await surface_memories_for_node(db, user.id, node_id)
+
+    return MemorySurfacingResponse(
+        explicit=[_surfaced_memory_to_response(m) for m in result.explicit],
+        suggested=[_surfaced_memory_to_response(m) for m in result.suggested],
+        total_count=result.total_count,
+        node_id=str(result.node_id),
     )
