@@ -1,28 +1,20 @@
 """
-Sources domain service (Section 6, 8.1).
-Handles source item CRUD, capture workflow, deduplication, fragments, and promotion.
+Source item CRUD and deduplication services (Section 6, 8.1).
 
 Invariants enforced:
-- B-01: Promotion contract (derived_from_source edge auto-created, original unchanged)
-- G-02: semantic_reference bounded for source edges
 - B-04: Ownership scope
 """
 
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.core.models.edge import Edge
 from server.app.core.models.enums import (
-    EdgeOrigin, EdgeRelationType, EdgeState, FragmentType, MemoryType,
-    NodeType, Permanence, ProcessingStatus, SourceType, TaskPriority,
-    TaskStatus, TriageStatus,
+    NodeType, Permanence, ProcessingStatus, SourceType, TriageStatus,
 )
-from server.app.core.models.node import (
-    KBNode, MemoryNode, Node, SourceFragment, SourceItemNode, TaskNode,
-)
+from server.app.core.models.node import Node, SourceItemNode
 from server.app.core.services.embedding import compute_checksum, generate_embedding
 
 
@@ -239,201 +231,6 @@ async def update_source(
 
     await db.flush()
     return node, source
-
-
-async def promote_source(
-    db: AsyncSession,
-    owner_id: uuid.UUID,
-    source_node_id: uuid.UUID,
-    target_type: str,
-    title: str | None = None,
-    memory_type: str | None = None,
-    priority: str | None = None,
-) -> tuple[uuid.UUID, uuid.UUID]:
-    """
-    Promote a source item to a knowledge entity.
-
-    Invariant B-01: Promotion contract:
-    - derived_from_source edge auto-created
-    - Original source unchanged (copies, never moves)
-    - Source triage_status -> promoted
-    - Idempotent: re-promoting creates a new target each time
-    """
-    pair = await get_source(db, owner_id, source_node_id, update_accessed=False)
-    if pair is None:
-        raise ValueError("Source not found")
-
-    source_node, source = pair
-    promoted_title = title or source_node.title
-    content = source.canonical_content or source.raw_content
-
-    # Create the target node based on type
-    if target_type == "kb_entry":
-        target_node = Node(
-            type=NodeType.KB_ENTRY,
-            owner_id=owner_id,
-            title=promoted_title,
-            summary=source_node.summary,
-        )
-        db.add(target_node)
-        await db.flush()
-
-        kb = KBNode(
-            node_id=target_node.id,
-            content=content,
-            raw_content=source.raw_content,
-        )
-        db.add(kb)
-        await db.flush()
-
-    elif target_type == "task":
-        target_node = Node(
-            type=NodeType.TASK,
-            owner_id=owner_id,
-            title=promoted_title,
-            summary=source_node.summary,
-        )
-        db.add(target_node)
-        await db.flush()
-
-        task = TaskNode(
-            node_id=target_node.id,
-            status=TaskStatus.TODO,
-            priority=TaskPriority(priority) if priority else TaskPriority.MEDIUM,
-            notes=content[:500] if content else None,
-        )
-        db.add(task)
-        await db.flush()
-
-    elif target_type == "memory":
-        target_node = Node(
-            type=NodeType.MEMORY,
-            owner_id=owner_id,
-            title=promoted_title,
-            summary=source_node.summary,
-        )
-        db.add(target_node)
-        await db.flush()
-
-        mem = MemoryNode(
-            node_id=target_node.id,
-            memory_type=MemoryType(memory_type) if memory_type else MemoryType.INSIGHT,
-            content=content,
-            context=source.capture_context,
-        )
-        db.add(mem)
-        await db.flush()
-
-    else:
-        raise ValueError(f"Invalid target_type: {target_type}. Must be kb_entry, task, or memory.")
-
-    # Invariant B-01: Auto-create derived_from_source edge
-    edge = Edge(
-        source_id=target_node.id,
-        target_id=source_node.id,
-        relation_type=EdgeRelationType.DERIVED_FROM_SOURCE,
-        origin=EdgeOrigin.SYSTEM,
-        state=EdgeState.ACTIVE,
-        weight=1.0,
-        metadata_={"promotion": True, "promoted_at": datetime.now(timezone.utc).isoformat()},
-    )
-    db.add(edge)
-    await db.flush()
-
-    # Invariant B-01: Update source triage_status to promoted
-    source.triage_status = TriageStatus.PROMOTED
-    await db.flush()
-
-    # Copy embedding to target if available
-    if source_node.embedding is not None:
-        target_node.embedding = source_node.embedding
-        await db.flush()
-
-    return target_node.id, edge.id
-
-
-# =============================================================================
-# Source Fragments
-# =============================================================================
-
-
-async def create_fragment(
-    db: AsyncSession,
-    owner_id: uuid.UUID,
-    source_node_id: uuid.UUID,
-    fragment_text: str,
-    position: int = 0,
-    fragment_type: FragmentType = FragmentType.PARAGRAPH,
-    section_ref: str | None = None,
-) -> SourceFragment:
-    """Create a source fragment. Verifies source ownership."""
-    # Verify source exists and is owned by user
-    source_node = await db.execute(
-        select(Node).where(
-            Node.id == source_node_id,
-            Node.owner_id == owner_id,
-            Node.type == NodeType.SOURCE_ITEM,
-        )
-    )
-    if source_node.scalar_one_or_none() is None:
-        raise ValueError("Source node not found or not owned by user")
-
-    fragment = SourceFragment(
-        source_node_id=source_node_id,
-        fragment_text=fragment_text,
-        position=position,
-        fragment_type=fragment_type,
-        section_ref=section_ref,
-    )
-    db.add(fragment)
-    await db.flush()
-
-    # Generate embedding for fragment
-    embedding = await generate_embedding(fragment_text)
-    if embedding:
-        fragment.embedding = embedding
-        await db.flush()
-
-    return fragment
-
-
-async def list_fragments(
-    db: AsyncSession,
-    owner_id: uuid.UUID,
-    source_node_id: uuid.UUID,
-    limit: int = 100,
-    offset: int = 0,
-) -> tuple[list[SourceFragment], int]:
-    """List fragments for a source item, enforcing ownership."""
-    # Verify source ownership
-    source_node = await db.execute(
-        select(Node).where(
-            Node.id == source_node_id,
-            Node.owner_id == owner_id,
-            Node.type == NodeType.SOURCE_ITEM,
-        )
-    )
-    if source_node.scalar_one_or_none() is None:
-        raise ValueError("Source node not found or not owned by user")
-
-    count_stmt = (
-        select(func.count())
-        .select_from(SourceFragment)
-        .where(SourceFragment.source_node_id == source_node_id)
-    )
-    total = (await db.execute(count_stmt)).scalar_one()
-
-    stmt = (
-        select(SourceFragment)
-        .where(SourceFragment.source_node_id == source_node_id)
-        .order_by(SourceFragment.position.asc())
-        .limit(limit)
-        .offset(offset)
-    )
-    result = await db.execute(stmt)
-    fragments = list(result.scalars().all())
-
-    return fragments, total
 
 
 async def check_duplicate_by_embedding(
