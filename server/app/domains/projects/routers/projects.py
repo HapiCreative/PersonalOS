@@ -3,7 +3,7 @@ Projects domain router (Section 8.3).
 Endpoints: POST/GET /api/projects, GET /api/projects/{id}, PUT /api/projects/{id}
 Layer: Core (read/write)
 
-Invariant G-05: belongs_to edges restricted to goal→project, task→project.
+Invariant G-05: belongs_to edges restricted to goal->project, task->project.
 """
 
 import uuid
@@ -23,7 +23,7 @@ from server.app.domains.projects.schemas import (
     ProjectWithLinksResponse,
     ProjectLinkedItemResponse,
 )
-from server.app.domains.projects.service import (
+from server.app.domains.projects.services import (
     create_project,
     get_project,
     list_projects,

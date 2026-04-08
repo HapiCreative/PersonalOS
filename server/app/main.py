@@ -25,7 +25,7 @@ from server.app.derived.router import router as derived_router
 from server.app.temporal.snooze_router import router as snooze_router
 from server.app.temporal.daily_plans_router import router as daily_plans_router
 from server.app.temporal.focus_sessions_router import router as focus_sessions_router
-from server.app.domains.projects.router import router as projects_router
+from server.app.domains.projects.routers import router as projects_router
 from server.app.behavioral.review_router import router as review_router
 from server.app.behavioral.llm_router import router as llm_router
 from server.app.derived.enrichments_router import router as enrichments_router
