@@ -1,29 +1,37 @@
 """
 Finance domain router (Section 8.3, Finance Design Rev 3).
 Endpoints for accounts, categories, allocations, balance snapshots, audit trail,
-and goal financial extension.
+goal financial extension, transactions, transfers, CSV import, and balance computation.
 
-Layer: Core (read/write)
+Layer: Core (read/write) + Behavioral (capture workflows)
 All endpoints enforce ownership (v6 Section 8.2 — every query filters by owner scope).
 
 Invariants enforced at API level:
 - F-01: Transactions never become nodes
+- F-02: amount always positive, direction in transaction_type
 - F-03: Goal financial field consistency
+- F-05: Transfer pairing — exactly 2 records per transfer_group_id
 - F-06: No shadow graph
+- F-08: Balance queries use posted/settled only
 - F-09: Reconciled snapshots authoritative
+- F-11: Every transaction mutation → history row
 - F-12: Category deletion blocked by referential integrity
 - F-13: Allocation bounds
 """
 
 import uuid
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.core.auth.dependencies import get_current_user
 from server.app.core.db.database import get_db
 from server.app.core.models.user import User
-from server.app.core.models.enums import BalanceSnapshotSource
+from server.app.core.models.enums import (
+    BalanceSnapshotSource,
+    FinancialTransactionStatus,
+)
 from server.app.domains.finance.schemas import (
     AccountCreate,
     AccountListResponse,
@@ -33,6 +41,7 @@ from server.app.domains.finance.schemas import (
     AllocationListResponse,
     AllocationResponse,
     AllocationUpdate,
+    BalanceReconcile,
     BalanceSnapshotCreate,
     BalanceSnapshotListResponse,
     BalanceSnapshotResponse,
@@ -41,32 +50,60 @@ from server.app.domains.finance.schemas import (
     CategoryResponse,
     CategoryTreeResponse,
     CategoryUpdate,
+    ComputedBalanceResponse,
+    CsvColumnMappingCreate,
+    CsvColumnMappingResponse,
+    CsvImportResult,
+    CsvPreviewResponse,
+    CsvPreviewRow,
     GoalFinancialUpdate,
+    ManualEntryDefaults,
+    TransactionCreate,
     TransactionHistoryListResponse,
     TransactionHistoryResponse,
+    TransactionListResponse,
+    TransactionResponse,
+    TransactionUpdate,
+    TransferCreate,
+    TransferResponse,
 )
 from server.app.domains.finance.service import (
+    compute_account_balance,
     create_account,
     create_allocation,
     create_balance_snapshot,
     create_category,
+    create_transaction,
+    create_transfer,
     deactivate_account,
     delete_allocation,
     delete_category,
+    detect_orphan_transfers,
+    execute_csv_import,
     get_account,
     get_allocation,
+    get_csv_mappings,
+    get_manual_entry_defaults,
+    get_transaction,
     get_transaction_history,
+    get_transfer_pair,
     list_accounts,
     list_allocations_for_account,
     list_allocations_for_goal,
     list_balance_snapshots,
     list_categories,
     list_categories_tree,
+    list_transactions,
+    preview_csv_import,
+    reconcile_balance_snapshot,
+    save_csv_mapping,
     seed_categories_for_user,
     update_account,
     update_allocation,
     update_category,
     update_goal_financial,
+    update_transaction,
+    void_transaction,
 )
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
@@ -520,3 +557,462 @@ async def get_transaction_history_endpoint(
         items=[TransactionHistoryResponse.model_validate(h) for h in items],
         total=len(items),
     )
+
+
+# =============================================================================
+# Transaction CRUD Endpoints (Session F1-C)
+# =============================================================================
+
+
+@router.post("/transactions", response_model=TransactionResponse, status_code=status.HTTP_201_CREATED)
+async def create_transaction_endpoint(
+    body: TransactionCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create a financial transaction.
+    Invariant F-02: amount must be positive.
+    Invariant F-11: creates audit history row.
+    """
+    try:
+        tx = await create_transaction(
+            db, user.id,
+            account_id=body.account_id,
+            transaction_type=body.transaction_type,
+            amount=body.amount,
+            currency=body.currency,
+            status=body.status,
+            category_id=body.category_id,
+            subcategory_id=body.subcategory_id,
+            category_source=body.category_source,
+            counterparty=body.counterparty,
+            description=body.description,
+            occurred_at=body.occurred_at,
+            posted_at=body.posted_at,
+            source=body.source,
+            external_id=body.external_id,
+            tags=body.tags,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    return TransactionResponse.model_validate(tx)
+
+
+@router.get("/transactions", response_model=TransactionListResponse)
+async def list_transactions_endpoint(
+    account_id: uuid.UUID | None = Query(default=None, description="Filter by account"),
+    include_voided: bool = Query(default=False, description="Include voided transactions"),
+    status_filter: FinancialTransactionStatus | None = Query(default=None, alias="status", description="Filter by status"),
+    category_id: uuid.UUID | None = Query(default=None, description="Filter by category"),
+    date_from: datetime | None = Query(default=None, description="Filter from date (inclusive)"),
+    date_to: datetime | None = Query(default=None, description="Filter to date (inclusive)"),
+    limit: int = Query(default=50, le=100),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List transactions with filters. Voided transactions excluded by default."""
+    items, total = await list_transactions(
+        db, user.id,
+        account_id=account_id,
+        include_voided=include_voided,
+        status_filter=status_filter,
+        category_id=category_id,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+    )
+    return TransactionListResponse(
+        items=[TransactionResponse.model_validate(tx) for tx in items],
+        total=total,
+    )
+
+
+@router.get("/transactions/{transaction_id}", response_model=TransactionResponse)
+async def get_transaction_endpoint(
+    transaction_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a single transaction by ID."""
+    tx = await get_transaction(db, user.id, transaction_id)
+    if tx is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+    return TransactionResponse.model_validate(tx)
+
+
+@router.put("/transactions/{transaction_id}", response_model=TransactionResponse)
+async def update_transaction_endpoint(
+    transaction_id: uuid.UUID,
+    body: TransactionUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update a transaction.
+    Invariant F-02: amount must be positive if provided.
+    Invariant F-11: creates audit history row on update.
+    Status lifecycle: pending → posted → settled.
+    """
+    try:
+        tx = await update_transaction(
+            db, user.id, transaction_id,
+            amount=body.amount,
+            transaction_type=body.transaction_type,
+            status=body.status,
+            category_id=body.category_id if body.category_id is not None else ...,
+            subcategory_id=body.subcategory_id if body.subcategory_id is not None else ...,
+            category_source=body.category_source,
+            counterparty=body.counterparty if body.counterparty is not None else ...,
+            description=body.description if body.description is not None else ...,
+            occurred_at=body.occurred_at,
+            posted_at=body.posted_at if body.posted_at is not None else ...,
+            tags=body.tags if body.tags is not None else ...,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    return TransactionResponse.model_validate(tx)
+
+
+@router.post("/transactions/{transaction_id}/void", response_model=TransactionResponse)
+async def void_transaction_endpoint(
+    transaction_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Void a transaction (soft delete).
+    Invariant F-11: creates audit history row on void.
+    """
+    try:
+        tx = await void_transaction(db, user.id, transaction_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    return TransactionResponse.model_validate(tx)
+
+
+# =============================================================================
+# Transfer Endpoints (Session F1-C)
+# =============================================================================
+
+
+@router.post("/transfers", response_model=TransferResponse, status_code=status.HTTP_201_CREATED)
+async def create_transfer_endpoint(
+    body: TransferCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create a paired transfer (transfer_out + transfer_in).
+    Invariant F-05: exactly 2 records per transfer_group_id.
+    Invariant F-02: amount must be positive.
+    """
+    try:
+        tx_out, tx_in = await create_transfer(
+            db, user.id,
+            from_account_id=body.from_account_id,
+            to_account_id=body.to_account_id,
+            amount=body.amount,
+            currency=body.currency,
+            description=body.description,
+            occurred_at=body.occurred_at,
+            status=body.status,
+            tags=body.tags,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    return TransferResponse(
+        transfer_group_id=tx_out.transfer_group_id,
+        transfer_out=TransactionResponse.model_validate(tx_out),
+        transfer_in=TransactionResponse.model_validate(tx_in),
+    )
+
+
+@router.get("/transfers/orphans", response_model=list[uuid.UUID])
+async def detect_orphan_transfers_endpoint(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Detect orphaned transfers (transfer_group_ids with count != 2).
+    Invariant F-05: exactly 2 records per transfer_group_id.
+    """
+    return await detect_orphan_transfers(db, user.id)
+
+
+@router.get("/transfers/{transfer_group_id}", response_model=list[TransactionResponse])
+async def get_transfer_pair_endpoint(
+    transfer_group_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get both transactions in a transfer pair."""
+    items = await get_transfer_pair(db, user.id, transfer_group_id)
+    if not items:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transfer pair not found")
+    return [TransactionResponse.model_validate(tx) for tx in items]
+
+
+# =============================================================================
+# Balance Computation & Reconciliation Endpoints (Session F1-C)
+# =============================================================================
+
+
+@router.get("/accounts/{account_id}/balance", response_model=ComputedBalanceResponse)
+async def get_account_balance_endpoint(
+    account_id: uuid.UUID,
+    as_of_date: date | None = Query(default=None, description="Compute balance as of this date"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Compute the current balance for an account.
+    Invariant F-08: only posted/settled transactions included.
+    Invariant F-09: reconciled snapshot is authoritative.
+    """
+    try:
+        result = await compute_account_balance(db, user.id, account_id, as_of_date)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    # Convert reconciled snapshot to response if present
+    snapshot_response = None
+    if result["last_reconciled_snapshot"] is not None:
+        snapshot_response = BalanceSnapshotResponse.model_validate(result["last_reconciled_snapshot"])
+
+    return ComputedBalanceResponse(
+        account_id=result["account_id"],
+        balance=result["balance"],
+        currency=result["currency"],
+        as_of_date=result["as_of_date"],
+        last_reconciled_snapshot=snapshot_response,
+        transactions_since_snapshot=result["transactions_since_snapshot"],
+        is_computed=result["is_computed"],
+    )
+
+
+@router.put("/balance-snapshots/{snapshot_id}/reconcile", response_model=BalanceSnapshotResponse)
+async def reconcile_balance_snapshot_endpoint(
+    snapshot_id: uuid.UUID,
+    body: BalanceReconcile,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Mark/unmark a balance snapshot as reconciled.
+    Invariant F-09: reconciled snapshot = source of truth.
+    """
+    try:
+        snapshot = await reconcile_balance_snapshot(db, user.id, snapshot_id, body.is_reconciled)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    return BalanceSnapshotResponse.model_validate(snapshot)
+
+
+# =============================================================================
+# CSV Import Endpoints (Session F1-C)
+# =============================================================================
+
+
+@router.post("/csv-import/preview", response_model=CsvPreviewResponse)
+async def preview_csv_import_endpoint(
+    account_id: uuid.UUID = Query(description="Target account for import"),
+    file: UploadFile = File(description="CSV file to import"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Preview CSV import: parse and validate before committing.
+    Section 5.2: Preview before commit with error/duplicate highlighting.
+    Requires a saved column mapping or uses the account's default mapping.
+    """
+    csv_content = (await file.read()).decode("utf-8")
+
+    # Try to find saved mapping for this account
+    mappings = await get_csv_mappings(db, user.id, account_id)
+    if not mappings:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No saved column mapping found for this account. "
+            "Save a mapping first via POST /api/finance/csv-import/mappings."
+        )
+
+    column_mapping = mappings[0].column_mapping
+
+    try:
+        result = await preview_csv_import(db, user.id, account_id, csv_content, column_mapping)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+    return CsvPreviewResponse(
+        total_rows=result["total_rows"],
+        valid_rows=result["valid_rows"],
+        error_rows=result["error_rows"],
+        duplicate_rows=result["duplicate_rows"],
+        rows=[CsvPreviewRow(**r) for r in result["rows"]],
+        detected_columns=result["detected_columns"],
+        has_balance_column=result["has_balance_column"],
+    )
+
+
+@router.post("/csv-import/preview-with-mapping", response_model=CsvPreviewResponse)
+async def preview_csv_import_with_mapping_endpoint(
+    account_id: uuid.UUID = Query(description="Target account for import"),
+    file: UploadFile = File(description="CSV file to import"),
+    mapping: str = Query(description="JSON-encoded column mapping"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Preview CSV import with an inline column mapping (not saved).
+    Useful for first-time import or trying different mappings.
+    """
+    import json
+
+    csv_content = (await file.read()).decode("utf-8")
+
+    try:
+        column_mapping = json.loads(mapping)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid JSON in mapping parameter",
+        )
+
+    try:
+        result = await preview_csv_import(db, user.id, account_id, csv_content, column_mapping)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+    return CsvPreviewResponse(
+        total_rows=result["total_rows"],
+        valid_rows=result["valid_rows"],
+        error_rows=result["error_rows"],
+        duplicate_rows=result["duplicate_rows"],
+        rows=[CsvPreviewRow(**r) for r in result["rows"]],
+        detected_columns=result["detected_columns"],
+        has_balance_column=result["has_balance_column"],
+    )
+
+
+@router.post("/csv-import/execute", response_model=CsvImportResult)
+async def execute_csv_import_endpoint(
+    account_id: uuid.UUID = Query(description="Target account for import"),
+    file: UploadFile = File(description="CSV file to import"),
+    save_mapping: bool = Query(default=True, description="Save column mapping for future use"),
+    mapping_name: str = Query(default="default", description="Name for saved mapping"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Execute CSV import: bulk insert transactions, skip duplicates.
+    Section 5.2: Bulk insert on confirm. Auto-generate balance_snapshots if balance column present.
+    Invariant F-02: amounts always positive.
+    Invariant F-11: audit trail for each imported transaction.
+    """
+    csv_content = (await file.read()).decode("utf-8")
+
+    # Get saved mapping
+    mappings = await get_csv_mappings(db, user.id, account_id)
+    if not mappings:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No saved column mapping found for this account. "
+            "Save a mapping first via POST /api/finance/csv-import/mappings."
+        )
+
+    column_mapping = mappings[0].column_mapping
+
+    try:
+        result = await execute_csv_import(
+            db, user.id, account_id, csv_content, column_mapping,
+            save_mapping=save_mapping, mapping_name=mapping_name,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+    return CsvImportResult(**result)
+
+
+@router.post("/csv-import/execute-with-mapping", response_model=CsvImportResult)
+async def execute_csv_import_with_mapping_endpoint(
+    account_id: uuid.UUID = Query(description="Target account for import"),
+    file: UploadFile = File(description="CSV file to import"),
+    mapping: str = Query(description="JSON-encoded column mapping"),
+    save_mapping: bool = Query(default=True, description="Save column mapping for future use"),
+    mapping_name: str = Query(default="default", description="Name for saved mapping"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Execute CSV import with an inline column mapping.
+    Section 5.2: Bulk insert on confirm with inline mapping.
+    """
+    import json
+
+    csv_content = (await file.read()).decode("utf-8")
+
+    try:
+        column_mapping = json.loads(mapping)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid JSON in mapping parameter",
+        )
+
+    try:
+        result = await execute_csv_import(
+            db, user.id, account_id, csv_content, column_mapping,
+            save_mapping=save_mapping, mapping_name=mapping_name,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+    return CsvImportResult(**result)
+
+
+@router.post("/csv-import/mappings", response_model=CsvColumnMappingResponse, status_code=status.HTTP_201_CREATED)
+async def save_csv_mapping_endpoint(
+    body: CsvColumnMappingCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save a CSV column mapping for an account (upserts by account + mapping_name)."""
+    try:
+        mapping = await save_csv_mapping(
+            db, user.id, body.account_id, body.column_mapping, body.mapping_name,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    return CsvColumnMappingResponse.model_validate(mapping)
+
+
+@router.get("/csv-import/mappings/{account_id}", response_model=list[CsvColumnMappingResponse])
+async def get_csv_mappings_endpoint(
+    account_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all saved CSV column mappings for an account."""
+    mappings = await get_csv_mappings(db, user.id, account_id)
+    return [CsvColumnMappingResponse.model_validate(m) for m in mappings]
+
+
+# =============================================================================
+# Smart Defaults Endpoint (Session F1-C)
+# =============================================================================
+
+
+@router.get("/defaults/manual-entry", response_model=ManualEntryDefaults)
+async def get_manual_entry_defaults_endpoint(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get smart defaults for manual transaction entry.
+    Section 5.2: most recently used account, date = today, status = posted.
+    """
+    result = await get_manual_entry_defaults(db, user.id)
+    return ManualEntryDefaults(**result)

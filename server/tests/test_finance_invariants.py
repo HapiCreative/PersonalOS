@@ -1,13 +1,17 @@
 """
 Application-layer validation tests for finance module invariants.
 These tests validate business logic enforcement without requiring a database.
-Acceptance criteria from Session Map F1-B.
+Acceptance criteria from Session Map F1-B and F1-C.
 
 Invariants tested:
 - F-01: Transactions never become nodes
+- F-02: Amount always positive, direction in transaction_type (F1-C)
 - F-03: Financial goal field consistency
+- F-05: Transfer pairing — exactly 2 records per transfer_group_id (F1-C)
 - F-06: No shadow graph (allocations + edges only)
+- F-08: Balance queries use posted/settled only (F1-C)
 - F-09: Reconciled snapshots authoritative
+- F-11: Every transaction mutation → history row (F1-C)
 - F-12: Category deletion blocked by referential integrity
 - F-13: Allocation bounds (percentage sum ≤ 1.0 per account)
 """
@@ -22,11 +26,13 @@ from server.app.core.models.enums import (
     AccountType,
     AllocationType,
     BalanceSnapshotSource,
+    CategorySource,
     FinancialTransactionStatus,
     FinancialTransactionType,
     GoalType,
     NodeType,
     TransactionChangeType,
+    TransactionSource,
 )
 from server.app.domains.finance.schemas import (
     AccountCreate,
@@ -34,8 +40,16 @@ from server.app.domains.finance.schemas import (
     BalanceSnapshotCreate,
     CategoryCreate,
     GoalFinancialUpdate,
+    TransactionCreate,
+    TransactionUpdate,
+    TransferCreate,
 )
-from server.app.domains.finance.service import validate_goal_financial_fields
+from server.app.domains.finance.service import (
+    VALID_STATUS_TRANSITIONS,
+    validate_goal_financial_fields,
+    _map_csv_row_to_transaction,
+    _parse_csv_content,
+)
 
 
 # =============================================================================
@@ -436,3 +450,502 @@ class TestSystemDefaultCategories:
         from server.app.domains.finance.service import SYSTEM_DEFAULT_CATEGORIES
         orders = [order for _, order in SYSTEM_DEFAULT_CATEGORIES]
         assert orders == list(range(1, 17))
+
+
+# =============================================================================
+# F-02: Amount Sign Convention (Session F1-C)
+# =============================================================================
+
+
+class TestInvariantF02:
+    """Invariant F-02: financial_transactions.amount is always positive.
+    Direction is encoded in transaction_type. signed_amount is a generated column."""
+
+    def test_transaction_create_positive_amount(self):
+        """Positive amount should pass schema validation."""
+        tx = TransactionCreate(
+            account_id=uuid.uuid4(),
+            transaction_type=FinancialTransactionType.EXPENSE,
+            amount=Decimal("50.00"),
+            currency="USD",
+        )
+        assert tx.amount == Decimal("50.00")
+
+    def test_transaction_create_zero_amount_rejected(self):
+        """Zero amount should be rejected by schema."""
+        with pytest.raises(ValueError, match="F-02|greater than"):
+            TransactionCreate(
+                account_id=uuid.uuid4(),
+                transaction_type=FinancialTransactionType.EXPENSE,
+                amount=Decimal("0"),
+                currency="USD",
+            )
+
+    def test_transaction_create_negative_amount_rejected(self):
+        """Negative amount should be rejected by schema."""
+        with pytest.raises(ValueError, match="F-02|greater than"):
+            TransactionCreate(
+                account_id=uuid.uuid4(),
+                transaction_type=FinancialTransactionType.EXPENSE,
+                amount=Decimal("-50.00"),
+                currency="USD",
+            )
+
+    def test_transaction_update_negative_amount_rejected(self):
+        """Negative amount update should be rejected by schema."""
+        with pytest.raises(ValueError, match="F-02|greater than"):
+            TransactionUpdate(amount=Decimal("-10.00"))
+
+    def test_transaction_update_zero_amount_rejected(self):
+        """Zero amount update should be rejected by schema."""
+        with pytest.raises(ValueError, match="F-02|greater than"):
+            TransactionUpdate(amount=Decimal("0"))
+
+    def test_transaction_update_positive_amount_passes(self):
+        """Positive amount update should pass validation."""
+        update = TransactionUpdate(amount=Decimal("100.50"))
+        assert update.amount == Decimal("100.50")
+
+    def test_all_inflow_types_defined(self):
+        """Verify all inflow transaction types exist."""
+        inflow_types = [
+            FinancialTransactionType.INCOME,
+            FinancialTransactionType.TRANSFER_IN,
+            FinancialTransactionType.REFUND,
+            FinancialTransactionType.INVESTMENT_SELL,
+            FinancialTransactionType.DIVIDEND,
+            FinancialTransactionType.INTEREST,
+        ]
+        for t in inflow_types:
+            assert t.value in [
+                "income", "transfer_in", "refund",
+                "investment_sell", "dividend", "interest",
+            ]
+
+    def test_all_outflow_types_defined(self):
+        """Verify all outflow transaction types exist."""
+        outflow_types = [
+            FinancialTransactionType.EXPENSE,
+            FinancialTransactionType.TRANSFER_OUT,
+            FinancialTransactionType.INVESTMENT_BUY,
+            FinancialTransactionType.FEE,
+            FinancialTransactionType.ADJUSTMENT,
+        ]
+        for t in outflow_types:
+            assert t.value in [
+                "expense", "transfer_out", "investment_buy",
+                "fee", "adjustment",
+            ]
+
+
+# =============================================================================
+# F-05: Transfer Pairing (Session F1-C)
+# =============================================================================
+
+
+class TestInvariantF05:
+    """Invariant F-05: Every transfer_in must have a corresponding transfer_out
+    with the same transfer_group_id. Exactly 2 records per group."""
+
+    def test_transfer_create_positive_amount(self):
+        """Transfer amount must be positive (F-02)."""
+        transfer = TransferCreate(
+            from_account_id=uuid.uuid4(),
+            to_account_id=uuid.uuid4(),
+            amount=Decimal("100.00"),
+            currency="USD",
+        )
+        assert transfer.amount == Decimal("100.00")
+
+    def test_transfer_create_negative_amount_rejected(self):
+        """Negative transfer amount should be rejected."""
+        with pytest.raises(ValueError, match="F-02|greater than"):
+            TransferCreate(
+                from_account_id=uuid.uuid4(),
+                to_account_id=uuid.uuid4(),
+                amount=Decimal("-50.00"),
+                currency="USD",
+            )
+
+    def test_transfer_create_same_accounts_rejected(self):
+        """Transfer to same account should be rejected."""
+        acct_id = uuid.uuid4()
+        with pytest.raises(ValueError, match="different"):
+            TransferCreate(
+                from_account_id=acct_id,
+                to_account_id=acct_id,
+                amount=Decimal("100.00"),
+                currency="USD",
+            )
+
+    def test_transfer_create_different_accounts_passes(self):
+        """Transfer between different accounts should pass."""
+        transfer = TransferCreate(
+            from_account_id=uuid.uuid4(),
+            to_account_id=uuid.uuid4(),
+            amount=Decimal("500.00"),
+            currency="EUR",
+        )
+        assert transfer.from_account_id != transfer.to_account_id
+
+    def test_transfer_types_are_paired(self):
+        """transfer_in and transfer_out should both exist as types."""
+        assert FinancialTransactionType.TRANSFER_IN.value == "transfer_in"
+        assert FinancialTransactionType.TRANSFER_OUT.value == "transfer_out"
+
+
+# =============================================================================
+# F-08: Transaction Status in Balance (Session F1-C)
+# =============================================================================
+
+
+class TestInvariantF08:
+    """Invariant F-08: Balance computations only include posted/settled transactions.
+    signed_amount = 0 for pending transactions."""
+
+    def test_pending_status_exists(self):
+        """Pending status should exist in the enum."""
+        assert FinancialTransactionStatus.PENDING.value == "pending"
+
+    def test_posted_status_exists(self):
+        """Posted status should exist in the enum."""
+        assert FinancialTransactionStatus.POSTED.value == "posted"
+
+    def test_settled_status_exists(self):
+        """Settled status should exist in the enum."""
+        assert FinancialTransactionStatus.SETTLED.value == "settled"
+
+    def test_status_lifecycle_transitions(self):
+        """Status lifecycle: pending → posted → settled. No other transitions."""
+        assert FinancialTransactionStatus.POSTED in VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.PENDING]
+        assert FinancialTransactionStatus.SETTLED in VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.POSTED]
+        assert VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.SETTLED] == []
+
+    def test_no_backward_transitions(self):
+        """No backward transitions allowed."""
+        # posted cannot go back to pending
+        assert FinancialTransactionStatus.PENDING not in VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.POSTED]
+        # settled cannot go back to posted or pending
+        assert FinancialTransactionStatus.POSTED not in VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.SETTLED]
+        assert FinancialTransactionStatus.PENDING not in VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.SETTLED]
+
+    def test_no_skip_transitions(self):
+        """Cannot skip from pending directly to settled."""
+        assert FinancialTransactionStatus.SETTLED not in VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.PENDING]
+
+    def test_default_status_is_posted(self):
+        """Default transaction status should be posted."""
+        tx = TransactionCreate(
+            account_id=uuid.uuid4(),
+            transaction_type=FinancialTransactionType.EXPENSE,
+            amount=Decimal("25.00"),
+            currency="USD",
+        )
+        assert tx.status == FinancialTransactionStatus.POSTED
+
+
+# =============================================================================
+# F-09: Reconciliation Authority — Extended Tests (Session F1-C)
+# =============================================================================
+
+
+class TestInvariantF09Extended:
+    """Extended F-09 tests: reconciled snapshots are authoritative.
+    Computed balances never override reconciled snapshots."""
+
+    def test_balance_snapshot_default_not_reconciled(self):
+        """Balance snapshots default to not reconciled."""
+        snap = BalanceSnapshotCreate(
+            account_id=uuid.uuid4(),
+            balance=Decimal("1000.00"),
+            currency="USD",
+            snapshot_date=date(2026, 4, 1),
+        )
+        assert snap.is_reconciled is False
+
+    def test_balance_snapshot_source_values(self):
+        """Balance snapshot source should have all expected values."""
+        assert BalanceSnapshotSource.MANUAL.value == "manual"
+        assert BalanceSnapshotSource.CSV_IMPORT.value == "csv_import"
+        assert BalanceSnapshotSource.API_SYNC.value == "api_sync"
+        assert BalanceSnapshotSource.COMPUTED.value == "computed"
+
+    def test_balance_snapshot_can_be_marked_reconciled(self):
+        """Balance snapshot can be explicitly marked as reconciled."""
+        snap = BalanceSnapshotCreate(
+            account_id=uuid.uuid4(),
+            balance=Decimal("5000.00"),
+            currency="USD",
+            snapshot_date=date(2026, 4, 5),
+            is_reconciled=True,
+        )
+        assert snap.is_reconciled is True
+
+
+# =============================================================================
+# F-11: Audit Trail — Extended Tests (Session F1-C)
+# =============================================================================
+
+
+class TestInvariantF11Extended:
+    """Extended F-11 tests: every mutation to financial_transactions must produce
+    a corresponding financial_transaction_history row."""
+
+    def test_change_types_cover_all_mutations(self):
+        """Change types should cover create, update, void — all mutation types."""
+        change_types = {ct.value for ct in TransactionChangeType}
+        assert change_types == {"create", "update", "void"}
+
+    def test_transaction_source_values(self):
+        """TransactionSource should have manual, csv_import, api_sync."""
+        assert TransactionSource.MANUAL.value == "manual"
+        assert TransactionSource.CSV_IMPORT.value == "csv_import"
+        assert TransactionSource.API_SYNC.value == "api_sync"
+
+    def test_category_source_values(self):
+        """CategorySource should have manual, system_suggested, imported."""
+        assert CategorySource.MANUAL.value == "manual"
+        assert CategorySource.SYSTEM_SUGGESTED.value == "system_suggested"
+        assert CategorySource.IMPORTED.value == "imported"
+
+
+# =============================================================================
+# CSV Import Parsing Tests (Session F1-C)
+# =============================================================================
+
+
+class TestCsvImportParsing:
+    """Tests for CSV import parsing and column mapping logic."""
+
+    def test_parse_csv_content(self):
+        """CSV content should be parsed into headers and rows."""
+        csv_content = "Date,Amount,Description\n2026-04-01,50.00,Groceries\n2026-04-02,25.00,Gas"
+        headers, rows = _parse_csv_content(csv_content)
+        assert headers == ["Date", "Amount", "Description"]
+        assert len(rows) == 2
+        assert rows[0]["Date"] == "2026-04-01"
+        assert rows[0]["Amount"] == "50.00"
+
+    def test_map_csv_row_positive_amount_is_income(self):
+        """Positive amount in CSV should map to income transaction type."""
+        row = {"Date": "2026-04-01", "Amount": "100.00", "Desc": "Salary"}
+        mapping = {"date": "Date", "amount": "Amount", "description": "Desc"}
+        account_id = uuid.uuid4()
+
+        tx_data, errors = _map_csv_row_to_transaction(row, mapping, account_id, "USD", 1)
+
+        assert not errors
+        assert tx_data is not None
+        assert tx_data["amount"] == Decimal("100.00")
+        assert tx_data["transaction_type"] == FinancialTransactionType.INCOME
+
+    def test_map_csv_row_negative_amount_is_expense(self):
+        """Negative amount in CSV should map to expense with positive amount (F-02)."""
+        row = {"Date": "2026-04-01", "Amount": "-50.00", "Desc": "Coffee"}
+        mapping = {"date": "Date", "amount": "Amount", "description": "Desc"}
+        account_id = uuid.uuid4()
+
+        tx_data, errors = _map_csv_row_to_transaction(row, mapping, account_id, "USD", 1)
+
+        assert not errors
+        assert tx_data is not None
+        # Invariant F-02: amount always stored positive
+        assert tx_data["amount"] == Decimal("50.00")
+        assert tx_data["transaction_type"] == FinancialTransactionType.EXPENSE
+
+    def test_map_csv_row_zero_amount_error(self):
+        """Zero amount should produce an error."""
+        row = {"Amount": "0.00"}
+        mapping = {"amount": "Amount"}
+        account_id = uuid.uuid4()
+
+        tx_data, errors = _map_csv_row_to_transaction(row, mapping, account_id, "USD", 1)
+
+        assert errors
+        assert tx_data is None
+
+    def test_map_csv_row_invalid_amount_error(self):
+        """Invalid amount should produce an error."""
+        row = {"Amount": "not-a-number"}
+        mapping = {"amount": "Amount"}
+        account_id = uuid.uuid4()
+
+        tx_data, errors = _map_csv_row_to_transaction(row, mapping, account_id, "USD", 1)
+
+        assert errors
+        assert "Invalid amount" in errors[0]
+
+    def test_map_csv_row_missing_amount_error(self):
+        """Missing amount column should produce an error."""
+        row = {"Date": "2026-04-01"}
+        mapping = {"date": "Date"}  # No amount mapping
+        account_id = uuid.uuid4()
+
+        tx_data, errors = _map_csv_row_to_transaction(row, mapping, account_id, "USD", 1)
+
+        assert errors
+        assert "amount" in errors[0].lower()
+
+    def test_map_csv_row_date_formats(self):
+        """Multiple date formats should be supported."""
+        mapping = {"date": "Date", "amount": "Amount"}
+        account_id = uuid.uuid4()
+
+        # YYYY-MM-DD
+        row1 = {"Date": "2026-04-01", "Amount": "10.00"}
+        tx1, err1 = _map_csv_row_to_transaction(row1, mapping, account_id, "USD", 1)
+        assert not err1
+        assert tx1["occurred_at"].year == 2026
+
+        # MM/DD/YYYY
+        row2 = {"Date": "04/01/2026", "Amount": "10.00"}
+        tx2, err2 = _map_csv_row_to_transaction(row2, mapping, account_id, "USD", 1)
+        assert not err2
+
+    def test_map_csv_row_currency_symbols_stripped(self):
+        """Currency symbols should be stripped from amount."""
+        row = {"Amount": "$1,234.56"}
+        mapping = {"amount": "Amount"}
+        account_id = uuid.uuid4()
+
+        tx_data, errors = _map_csv_row_to_transaction(row, mapping, account_id, "USD", 1)
+
+        assert not errors
+        assert tx_data["amount"] == Decimal("1234.56")
+
+    def test_map_csv_row_sets_csv_import_source(self):
+        """Mapped transaction should have source = csv_import."""
+        row = {"Amount": "10.00"}
+        mapping = {"amount": "Amount"}
+        account_id = uuid.uuid4()
+
+        tx_data, errors = _map_csv_row_to_transaction(row, mapping, account_id, "USD", 1)
+
+        assert not errors
+        assert tx_data["source"] == TransactionSource.CSV_IMPORT
+
+    def test_map_csv_row_external_id_mapping(self):
+        """External ID should be mapped for dedup."""
+        row = {"Amount": "10.00", "Ref": "TXN-12345"}
+        mapping = {"amount": "Amount", "external_id": "Ref"}
+        account_id = uuid.uuid4()
+
+        tx_data, errors = _map_csv_row_to_transaction(row, mapping, account_id, "USD", 1)
+
+        assert not errors
+        assert tx_data["external_id"] == "TXN-12345"
+
+    def test_map_csv_row_counterparty_mapping(self):
+        """Counterparty should be mapped from CSV."""
+        row = {"Amount": "10.00", "Payee": "Amazon"}
+        mapping = {"amount": "Amount", "counterparty": "Payee"}
+        account_id = uuid.uuid4()
+
+        tx_data, errors = _map_csv_row_to_transaction(row, mapping, account_id, "USD", 1)
+
+        assert not errors
+        assert tx_data["counterparty"] == "Amazon"
+
+
+# =============================================================================
+# Transaction Schema Validation Tests (Session F1-C)
+# =============================================================================
+
+
+class TestTransactionSchemas:
+    """Transaction schema validation tests for session F1-C."""
+
+    def test_transaction_create_defaults(self):
+        """Default values should match spec: status=posted, source=manual."""
+        tx = TransactionCreate(
+            account_id=uuid.uuid4(),
+            transaction_type=FinancialTransactionType.INCOME,
+            amount=Decimal("1000.00"),
+            currency="USD",
+        )
+        assert tx.status == FinancialTransactionStatus.POSTED
+        assert tx.source == TransactionSource.MANUAL
+        assert tx.category_source == CategorySource.MANUAL
+        assert tx.occurred_at is None  # Will be set to now in service
+
+    def test_transaction_create_with_all_fields(self):
+        """Transaction with all optional fields should pass."""
+        now = datetime.now(timezone.utc)
+        tx = TransactionCreate(
+            account_id=uuid.uuid4(),
+            transaction_type=FinancialTransactionType.EXPENSE,
+            amount=Decimal("42.99"),
+            currency="USD",
+            status=FinancialTransactionStatus.PENDING,
+            category_id=uuid.uuid4(),
+            subcategory_id=uuid.uuid4(),
+            category_source=CategorySource.SYSTEM_SUGGESTED,
+            counterparty="Coffee Shop",
+            description="Morning coffee",
+            occurred_at=now,
+            posted_at=now,
+            source=TransactionSource.CSV_IMPORT,
+            external_id="EXT-123",
+            tags=["coffee", "daily"],
+        )
+        assert tx.amount == Decimal("42.99")
+        assert tx.counterparty == "Coffee Shop"
+
+    def test_transaction_create_invalid_currency(self):
+        """Currency code must be exactly 3 characters."""
+        with pytest.raises(ValueError):
+            TransactionCreate(
+                account_id=uuid.uuid4(),
+                transaction_type=FinancialTransactionType.EXPENSE,
+                amount=Decimal("10.00"),
+                currency="US",
+            )
+
+    def test_transfer_create_defaults(self):
+        """Transfer defaults should be status=posted."""
+        transfer = TransferCreate(
+            from_account_id=uuid.uuid4(),
+            to_account_id=uuid.uuid4(),
+            amount=Decimal("500.00"),
+            currency="USD",
+        )
+        assert transfer.status == FinancialTransactionStatus.POSTED
+
+
+# =============================================================================
+# Status Lifecycle Tests (Session F1-C)
+# =============================================================================
+
+
+class TestStatusLifecycle:
+    """Tests for transaction status lifecycle: pending → posted → settled."""
+
+    def test_valid_transitions_defined(self):
+        """All three statuses should have defined transition rules."""
+        assert FinancialTransactionStatus.PENDING in VALID_STATUS_TRANSITIONS
+        assert FinancialTransactionStatus.POSTED in VALID_STATUS_TRANSITIONS
+        assert FinancialTransactionStatus.SETTLED in VALID_STATUS_TRANSITIONS
+
+    def test_pending_to_posted_valid(self):
+        """pending → posted is a valid transition."""
+        assert FinancialTransactionStatus.POSTED in VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.PENDING]
+
+    def test_posted_to_settled_valid(self):
+        """posted → settled is a valid transition."""
+        assert FinancialTransactionStatus.SETTLED in VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.POSTED]
+
+    def test_settled_is_terminal(self):
+        """settled has no valid transitions (terminal state)."""
+        assert len(VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.SETTLED]) == 0
+
+    def test_pending_to_settled_invalid(self):
+        """pending → settled (skipping posted) is NOT valid."""
+        assert FinancialTransactionStatus.SETTLED not in VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.PENDING]
+
+    def test_posted_to_pending_invalid(self):
+        """posted → pending (backward) is NOT valid."""
+        assert FinancialTransactionStatus.PENDING not in VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.POSTED]
+
+    def test_settled_to_anything_invalid(self):
+        """settled → any other status is NOT valid."""
+        assert VALID_STATUS_TRANSITIONS[FinancialTransactionStatus.SETTLED] == []
