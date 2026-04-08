@@ -664,7 +664,11 @@ Verify all specified graph connections work in the UI (backlinks, context layer)
 
 ## F2.6 — Core: Obligation Nodes (Schema + Manual Creation)
 
-**Ref:** Obligations Addendum Section 8.1 — “Finance Phase 2 Additions”
+**Ref:** Obligations Addendum Sections 1, 2, 5.1, 8.1
+
+**Two-Stage Lifecycle** (Addendum Section 1.2): Stage 1 — Detection (Derived): recurring_patterns detects patterns from transaction history. Patterns with confidence > 0.7 become promotion candidates. Stage 2 — Promotion (Core): user confirms a detected pattern, or manually creates an obligation. Promotion Contract (v6 Section 5.8) applies — provenance edge back to originating pattern.
+
+**Constraint 8**: Obligations are Core entities promoted from Derived patterns or manually created. They participate in the graph, link to accounts and goals, and drive Behavioral alerting. Transaction matching emits Temporal events; Derived recomputes from events. Derived never mutates Derived directly.
 
 Per the Obligations Addendum roadmap, obligation_nodes, breakdowns, edge relations, and rule-based obligation alerts belong in Phase 2 (F2). Transaction matching, seasonal intelligence, and pattern-based alerts belong in Phase 3 (F3).
 
@@ -781,6 +785,7 @@ Added to the Alerts Engine (F2.4):
 - [ ] Dynamic lead time calculation working
 - [ ] Autopay-aware severity adjustment working
 - [ ] All obligation-related indexes created
+- [ ] Obligation graph connections verified: obligation → account (obligation_charges_account), obligation → goal (obligation_impacts_goal), memory ↔ obligation (semantic_reference), source → obligation (captured_for), journal → obligation (journal_reflects_on), obligation ↔ obligation (semantic_reference for bundles)
 
 -----
 
@@ -801,6 +806,15 @@ Added to the Alerts Engine (F2.4):
 **Ref:** Obligations Addendum Section 3.1 + Section 8.2 (“Finance Phase 3 Additions”)
 
 Obligation schema was created in F2.6. This phase activates the Temporal event layer, transaction matching, and seasonal intelligence.
+
+**Correct Data Flow** (Addendum Section 3.2 — critical architectural principle):
+
+1. Transaction posts → Derived matching computes candidate match with weighted confidence score.
+1. Match accepted → obligation_events row created (Temporal) with event_status=paid, transaction_id set, match_confidence stored.
+1. Derived recomputation triggered → next_expected_date on obligation_nodes recalculated from recurrence_rule + latest obligation_event.
+1. No match by expected date + lead_time → obligation_events row created with event_status=missed → Alerts Engine fires.
+
+Derived never mutates Derived directly. Transaction matching emits Temporal events, and Derived recomputes from those events.
 
 ```
 obligation_events (
@@ -956,12 +970,23 @@ Where w1=0.4, w2=0.35, w3=0.25. Variance stability = 1 - (coefficient of variati
 - `(obligation_id, period_type, period_value)` — seasonal lookup
 - `(obligation_id, breakdown_id)` — per-component profiles
 
+**Downstream Consumers** (Addendum Section 4.5):
+
+|Consumer          |Usage                                                                                   |
+|------------------|----------------------------------------------------------------------------------------|
+|Anomaly detection |Compare against seasonal profile instead of annual median. Eliminates false positives.  |
+|Forecasting engine|Month-end cash forecast uses seasonal profiles for variable obligations.                |
+|Alerts Engine     |Seasonally-aware alerting: “July electricity $230 exceeds typical July range $170–$200.”|
+|Monthly Review    |“Heating costs entering seasonal peak. Expected +$60/month through February.”           |
+
 ### Acceptance Criteria — F3.5
 
 - [ ] Seasonal profiles computed for variable/seasonal obligations
 - [ ] Confidence thresholds enforced (F-23)
 - [ ] Seasonality correctly requires consecutive deviation (F-24)
 - [ ] Rate changes detected after 2 consecutive months
+- [ ] Anomaly detection uses seasonal profiles when available (eliminating false positives)
+- [ ] Forecasting engine consumes seasonal profiles for variable obligations
 
 -----
 
