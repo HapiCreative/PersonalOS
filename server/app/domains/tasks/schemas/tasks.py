@@ -1,13 +1,11 @@
-"""Pydantic schemas for task operations (Section 2.4, 3.7)."""
+"""Pydantic schemas for task operations (Section 2.4)."""
 
 import uuid
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
-from server.app.core.models.enums import (
-    TaskStatus, TaskPriority, Mood, TaskExecutionEventType,
-)
+from server.app.core.models.enums import TaskStatus, TaskPriority
 
 
 class TaskCreate(BaseModel):
@@ -53,31 +51,4 @@ class TaskResponse(BaseModel):
 
 class TaskListResponse(BaseModel):
     items: list[TaskResponse]
-    total: int
-
-
-# Task Execution Events (Section 3.7)
-
-class TaskExecutionEventCreate(BaseModel):
-    task_id: uuid.UUID
-    event_type: TaskExecutionEventType
-    expected_for_date: date
-    notes: str | None = None
-
-
-class TaskExecutionEventResponse(BaseModel):
-    id: uuid.UUID
-    task_id: uuid.UUID
-    user_id: uuid.UUID
-    event_type: TaskExecutionEventType
-    expected_for_date: date
-    notes: str | None
-    created_at: datetime
-    node_deleted: bool
-
-    model_config = {"from_attributes": True}
-
-
-class TaskExecutionEventListResponse(BaseModel):
-    items: list[TaskExecutionEventResponse]
     total: int
