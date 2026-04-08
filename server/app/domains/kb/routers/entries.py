@@ -1,8 +1,4 @@
-"""
-KB domain router (Section 8.3).
-Endpoints: POST/GET /api/kb, POST /api/kb/{id}/compile
-Layer: Core (read/write) + Derived (compilation)
-"""
+"""KB entry CRUD endpoints (Section 8.3)."""
 
 import uuid
 
@@ -14,22 +10,19 @@ from server.app.core.db.database import get_db
 from server.app.core.models.user import User
 from server.app.core.models.enums import CompileStatus, PipelineStage
 from server.app.domains.kb.schemas import (
-    KBCompileRequest,
-    KBCompileResponse,
     KBCreate,
     KBListResponse,
     KBResponse,
     KBUpdate,
 )
-from server.app.domains.kb.service import (
-    compile_kb_entry,
+from server.app.domains.kb.services import (
     create_kb_entry,
     get_kb_entry,
     list_kb_entries,
     update_kb_entry,
 )
 
-router = APIRouter(prefix="/api/kb", tags=["kb"])
+router = APIRouter()
 
 
 def _to_response(node, kb) -> KBResponse:
@@ -115,26 +108,3 @@ async def update_kb_endpoint(
     if pair is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="KB entry not found")
     return _to_response(*pair)
-
-
-@router.post("/{node_id}/compile", response_model=KBCompileResponse)
-async def compile_kb_endpoint(
-    node_id: uuid.UUID,
-    body: KBCompileRequest,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Trigger or advance the KB compilation pipeline.
-    6-stage: ingest -> parse -> compile -> review -> accept -> stale
-    """
-    try:
-        node, kb = await compile_kb_entry(db, user.id, node_id, body.action)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
-    return KBCompileResponse(
-        node_id=node.id,
-        compile_status=kb.compile_status,
-        pipeline_stage=kb.pipeline_stage,
-        compile_version=kb.compile_version,
-    )

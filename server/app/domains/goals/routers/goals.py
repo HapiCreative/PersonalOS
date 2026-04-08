@@ -1,7 +1,6 @@
 """
-Goals domain router (Section 8.3).
+Goals CRUD router endpoints (Section 8.3).
 Endpoints: POST/GET /api/goals, GET /api/goals/{id}, PUT /api/goals/{id}
-Layer: Core (read/write) + Derived (progress computation)
 """
 
 import uuid
@@ -21,7 +20,7 @@ from server.app.domains.goals.schemas import (
     GoalWithTasksResponse,
     GoalLinkedTaskResponse,
 )
-from server.app.domains.goals.service import (
+from server.app.domains.goals.services import (
     create_goal,
     get_goal,
     list_goals,
@@ -135,22 +134,3 @@ async def update_goal_endpoint(
     if pair is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found")
     return _to_response(*pair)
-
-
-@router.post("/{node_id}/refresh-progress", response_model=GoalResponse)
-async def refresh_progress_endpoint(
-    node_id: uuid.UUID,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Manually refresh goal progress computation.
-    Invariant D-03: progress is non-canonical, recomputable.
-    """
-    pair = await get_goal(db, user.id, node_id, update_accessed=False)
-    if pair is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found")
-
-    await refresh_goal_progress(db, node_id)
-    pair = await get_goal(db, user.id, node_id, update_accessed=False)
-    return _to_response(*pair)  # type: ignore

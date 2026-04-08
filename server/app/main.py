@@ -13,19 +13,19 @@ from server.app.core.routers.edges import router as edges_router
 from server.app.core.routers.search import router as search_router
 from server.app.domains.inbox.router import router as inbox_router
 from server.app.domains.tasks.routers import router as tasks_router, events_router
-from server.app.domains.journal.router import router as journal_router
+from server.app.domains.journal.routers import router as journal_router
 from server.app.domains.templates.routers import router as templates_router
 from server.app.domains.sources.routers import router as sources_router
-from server.app.domains.kb.router import router as kb_router
+from server.app.domains.kb.routers import router as kb_router
 from server.app.domains.memory.router import router as memory_router
-from server.app.domains.goals.router import router as goals_router
+from server.app.domains.goals.routers import router as goals_router
 from server.app.behavioral.router import router as today_router
 from server.app.behavioral.cleanup_router import router as cleanup_router
 from server.app.derived.router import router as derived_router
 from server.app.temporal.snooze_router import router as snooze_router
 from server.app.temporal.daily_plans_router import router as daily_plans_router
 from server.app.temporal.focus_sessions_router import router as focus_sessions_router
-from server.app.domains.projects.router import router as projects_router
+from server.app.domains.projects.routers import router as projects_router
 from server.app.behavioral.review_router import router as review_router
 from server.app.behavioral.llm_router import router as llm_router
 from server.app.derived.enrichments_router import router as enrichments_router
