@@ -33,6 +33,7 @@ from server.app.core.services.pipeline_router import router as pipeline_jobs_rou
 from server.app.core.routers.admin import router as admin_router
 from server.app.derived.analytics_router import router as analytics_router
 from server.app.behavioral.decision_resurfacing_router import router as decision_resurfacing_router
+from server.app.domains.finance.router import router as finance_router
 
 app = FastAPI(
     title="Personal OS",
@@ -105,6 +106,9 @@ app.include_router(analytics_router)
 
 # Phase PB: Decision Resurfacing + Edge Weights + Depth
 app.include_router(decision_resurfacing_router)
+
+# Phase F1: Finance Module
+app.include_router(finance_router)
 
 
 @app.get("/api/health")
