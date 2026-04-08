@@ -16,10 +16,11 @@ class NodeType(str, enum.Enum):
     SOURCE_ITEM = "source_item"
     INBOX_ITEM = "inbox_item"
     PROJECT = "project"
+    ACCOUNT = "account"  # Finance Module (Section 2.1)
 
 
 class EdgeRelationType(str, enum.Enum):
-    """Section 2.3: Edge relation taxonomy (all 11 types)."""
+    """Section 2.3: Edge relation taxonomy (all 11 types + finance)."""
     SEMANTIC_REFERENCE = "semantic_reference"
     DERIVED_FROM_SOURCE = "derived_from_source"
     PARENT_CHILD = "parent_child"
@@ -31,6 +32,7 @@ class EdgeRelationType(str, enum.Enum):
     SOURCE_SUPPORTS_GOAL = "source_supports_goal"
     SOURCE_QUOTED_IN = "source_quoted_in"
     CAPTURED_FOR = "captured_for"
+    ACCOUNT_FUNDS_GOAL = "account_funds_goal"  # Finance Module (Section 2.3)
 
 
 class EdgeOrigin(str, enum.Enum):
@@ -248,3 +250,84 @@ class AIMode(str, enum.Enum):
     PLAN = "plan"
     REFLECT = "reflect"
     IMPROVE = "improve"
+
+
+# =============================================================================
+# Finance Module enums (Finance Design Rev 3)
+# =============================================================================
+
+
+class AccountType(str, enum.Enum):
+    """Section 2.1: Account types for financial accounts."""
+    CHECKING = "checking"
+    SAVINGS = "savings"
+    CREDIT_CARD = "credit_card"
+    BROKERAGE = "brokerage"
+    CRYPTO_WALLET = "crypto_wallet"
+    CASH = "cash"
+    LOAN = "loan"
+    MORTGAGE = "mortgage"
+    OTHER = "other"
+
+
+class GoalType(str, enum.Enum):
+    """Section 2.2: Goal type discriminator for financial vs general goals."""
+    GENERAL = "general"
+    FINANCIAL = "financial"
+
+
+class AllocationType(str, enum.Enum):
+    """Section 2.6: Goal allocation type."""
+    PERCENTAGE = "percentage"
+    FIXED = "fixed"
+
+
+class FinancialTransactionType(str, enum.Enum):
+    """Section 3.1: All 11 transaction types."""
+    INCOME = "income"
+    EXPENSE = "expense"
+    TRANSFER_IN = "transfer_in"
+    TRANSFER_OUT = "transfer_out"
+    INVESTMENT_BUY = "investment_buy"
+    INVESTMENT_SELL = "investment_sell"
+    DIVIDEND = "dividend"
+    INTEREST = "interest"
+    FEE = "fee"
+    REFUND = "refund"
+    ADJUSTMENT = "adjustment"
+
+
+class FinancialTransactionStatus(str, enum.Enum):
+    """Section 3.1: Transaction status lifecycle."""
+    PENDING = "pending"
+    POSTED = "posted"
+    SETTLED = "settled"
+
+
+class CategorySource(str, enum.Enum):
+    """Section 3.1: How category was assigned to a transaction."""
+    MANUAL = "manual"
+    SYSTEM_SUGGESTED = "system_suggested"
+    IMPORTED = "imported"
+
+
+class TransactionSource(str, enum.Enum):
+    """Section 3.1: Data origin of a transaction."""
+    MANUAL = "manual"
+    CSV_IMPORT = "csv_import"
+    API_SYNC = "api_sync"
+
+
+class BalanceSnapshotSource(str, enum.Enum):
+    """Section 3.2: Data origin of a balance snapshot."""
+    MANUAL = "manual"
+    CSV_IMPORT = "csv_import"
+    API_SYNC = "api_sync"
+    COMPUTED = "computed"
+
+
+class TransactionChangeType(str, enum.Enum):
+    """Section 3.6: Transaction history change types."""
+    CREATE = "create"
+    UPDATE = "update"
+    VOID = "void"
