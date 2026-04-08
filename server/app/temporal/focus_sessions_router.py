@@ -21,6 +21,7 @@ from server.app.temporal.focus_sessions_service import (
     get_active_focus_session,
     get_focus_session,
     list_focus_sessions,
+    get_focus_stats,
 )
 
 router = APIRouter(prefix="/api/focus-sessions", tags=["focus-sessions"])
@@ -119,6 +120,22 @@ async def list_sessions(
         items=[_session_to_response(s) for s in sessions],
         total=total,
     )
+
+
+@router.get("/stats", response_model=dict)
+async def get_focus_statistics(
+    task_id: str | None = None,
+    days: int = Query(7, ge=1, le=90),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase PB: Get focus session statistics for deeper session tracking.
+    Returns stats over the last N days, optionally scoped to a task.
+    """
+    tid = uuid.UUID(task_id) if task_id else None
+    stats = await get_focus_stats(db, user.id, tid, days)
+    return stats
 
 
 @router.get("/{session_id}", response_model=FocusSessionResponse)

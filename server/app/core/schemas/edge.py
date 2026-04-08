@@ -39,6 +39,11 @@ class EdgeStateUpdate(BaseModel):
     state: EdgeState
 
 
+class EdgeWeightUpdate(BaseModel):
+    """Phase PB: User override of edge weight (Section 2.3 Edge Weight Rules)."""
+    weight: float = Field(ge=0.0, le=1.0)
+
+
 class EdgeListResponse(BaseModel):
     items: list[EdgeResponse]
     total: int

@@ -113,6 +113,12 @@ import type {
   ResurfacingResponse,
   RollupComputeResponse,
   DailyRollupResponse,
+  // Phase PB: Decision Resurfacing + Edge Weights + Depth
+  DecisionResurfacingResponse,
+  MemorySurfacingResponse,
+  FocusStatsResponse,
+  CleanupActionPB,
+  CleanupActionResponsePB,
 } from '../types';
 
 // Auth
@@ -469,6 +475,9 @@ export const derivedApi = {
 export const edgeStateApi = {
   updateState: (edgeId: string, state: EdgeState) =>
     api.patch<EdgeResponse>(`/edges/${edgeId}/state`, { state }),
+  // Phase PB: Edge weight user override
+  updateWeight: (edgeId: string, weight: number) =>
+    api.patch<EdgeResponse>(`/edges/${edgeId}/weight`, { weight }),
 };
 
 // Cleanup (Phase 6 — Behavioral + Derived)
@@ -793,4 +802,45 @@ export const analyticsApi = {
   },
   resurfaceToday: () =>
     api.get<ResurfacingResponse>('/analytics/resurface/today'),
+};
+
+// =============================================================================
+// Phase PB: Decision Resurfacing + Edge Weights + Depth
+// =============================================================================
+
+// Decision resurfacing (Section 5.7 — Behavioral)
+export const decisionResurfacingApi = {
+  get: (limit?: number) => {
+    const query = new URLSearchParams();
+    if (limit) query.set('limit', String(limit));
+    return api.get<DecisionResurfacingResponse>(`/decisions/resurfacing?${query}`);
+  },
+};
+
+// Memory contextual surfacing (Section 4.5 — Derived)
+export const memorySurfacingApi = {
+  getForNode: (nodeId: string) =>
+    api.get<MemorySurfacingResponse>(`/derived/memories/${nodeId}`),
+};
+
+// Focus session stats (Phase PB — Temporal)
+export const focusStatsApi = {
+  getStats: (params?: { task_id?: string; days?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.task_id) query.set('task_id', params.task_id);
+    if (params?.days) query.set('days', String(params.days));
+    return api.get<FocusStatsResponse>(`/focus-sessions/stats?${query}`);
+  },
+};
+
+// Enhanced cleanup (Phase PB — Behavioral)
+export const cleanupPBApi = {
+  executeAction: (data: {
+    action: CleanupActionPB;
+    node_ids: string[];
+    snoozed_until?: string;
+    target_type?: string;
+    target_project_id?: string;
+    target_goal_id?: string;
+  }) => api.post<CleanupActionResponsePB>('/cleanup/action', data),
 };

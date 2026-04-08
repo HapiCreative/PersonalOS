@@ -13,12 +13,13 @@ from server.app.core.auth.dependencies import get_current_user
 from server.app.core.db.database import get_db
 from server.app.core.models.user import User
 from server.app.core.models.enums import EdgeRelationType, EdgeState
-from server.app.core.schemas.edge import EdgeCreate, EdgeListResponse, EdgeResponse, EdgeStateUpdate
+from server.app.core.schemas.edge import EdgeCreate, EdgeListResponse, EdgeResponse, EdgeStateUpdate, EdgeWeightUpdate
 from server.app.core.services.edge_service import (
     create_edge,
     delete_edge,
     get_edges_for_node,
     update_edge_state,
+    update_edge_weight,
 )
 
 router = APIRouter(tags=["edges"])
@@ -121,6 +122,38 @@ async def update_edge_state_endpoint(
     Phase 5: Used for one-click promotion of suggested links in context layer.
     """
     edge = await update_edge_state(db, user.id, edge_id, body.state)
+    if edge is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Edge not found")
+
+    return EdgeResponse(
+        id=edge.id,
+        source_id=edge.source_id,
+        target_id=edge.target_id,
+        relation_type=edge.relation_type,
+        origin=edge.origin,
+        state=edge.state,
+        weight=edge.weight,
+        confidence=edge.confidence,
+        metadata=edge.metadata_,
+        created_at=edge.created_at,
+    )
+
+
+@router.patch("/api/edges/{edge_id}/weight", response_model=EdgeResponse)
+async def update_edge_weight_endpoint(
+    edge_id: uuid.UUID,
+    body: EdgeWeightUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase PB: Update edge weight (user override).
+    Section 2.3 Edge Weight Rules: Users can optionally adjust weights post-MVP.
+    """
+    try:
+        edge = await update_edge_weight(db, user.id, edge_id, body.weight)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     if edge is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Edge not found")
 

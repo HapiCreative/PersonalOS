@@ -32,6 +32,7 @@ from server.app.derived.enrichments_router import router as enrichments_router
 from server.app.core.services.pipeline_router import router as pipeline_jobs_router
 from server.app.core.routers.admin import router as admin_router
 from server.app.derived.analytics_router import router as analytics_router
+from server.app.behavioral.decision_resurfacing_router import router as decision_resurfacing_router
 
 app = FastAPI(
     title="Personal OS",
@@ -102,7 +103,10 @@ app.include_router(admin_router)
 # Phase PC: Analytics + Intelligence (Semantic Clustering, Smart Resurfacing)
 app.include_router(analytics_router)
 
+# Phase PB: Decision Resurfacing + Edge Weights + Depth
+app.include_router(decision_resurfacing_router)
+
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "0.10.0"}
+    return {"status": "ok", "version": "0.11.0"}

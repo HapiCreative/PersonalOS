@@ -149,3 +149,33 @@ async def update_edge_state(
     edge.state = new_state
     await db.flush()
     return edge
+
+
+async def update_edge_weight(
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+    edge_id: uuid.UUID,
+    new_weight: float,
+) -> Edge | None:
+    """
+    Phase PB: User override of edge weight.
+    Section 2.3 Edge Weight Rules:
+    - Post-MVP (Phase B): Users can optionally adjust weights.
+    - Weight must be 0.0-1.0 (enforced by DB constraint edges_weight_range).
+    """
+    if not (0.0 <= new_weight <= 1.0):
+        raise ValueError("Edge weight must be between 0.0 and 1.0")
+
+    stmt = (
+        select(Edge)
+        .join(Node, Node.id == Edge.source_id)
+        .where(Edge.id == edge_id, Node.owner_id == owner_id)
+    )
+    result = await db.execute(stmt)
+    edge = result.scalar_one_or_none()
+    if edge is None:
+        return None
+
+    edge.weight = new_weight
+    await db.flush()
+    return edge
