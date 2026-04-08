@@ -19,7 +19,7 @@ from server.app.domains.templates.schemas import (
     TemplateResponse,
     TemplateUpdate,
 )
-from server.app.domains.templates.service import (
+from server.app.domains.templates.services import (
     create_template,
     delete_template,
     get_template,
