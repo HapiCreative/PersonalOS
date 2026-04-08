@@ -15,65 +15,53 @@ server/app/domains/<domain>/
 
 Database models live in `server/app/core/models/`.
 
-## Finance Module File Size Guards
+## Domain Module File Size Guards
 
-The finance module (`server/app/domains/finance/`) is the largest domain and
-must be kept maintainable. **Do not add logic to an existing file if it would
-push that file beyond 400 lines.** When a file approaches or exceeds this
-threshold, split it into focused sub-modules.
+These rules apply to **every** domain module under `server/app/domains/`, not
+just finance. **Do not add logic to an existing file if it would push that file
+beyond 400 lines.** When a file approaches or exceeds this threshold, split it
+into focused sub-modules before adding new code.
+
+### Mandatory checks before adding code to any domain
+
+1. **Count lines first.** Before adding a function or endpoint, check the
+   target file's line count. If it is above 400 lines, split first, then add.
+2. **One responsibility per file.** Each sub-module file should cover a single
+   entity or workflow. Do not mix unrelated concerns.
+3. **No god functions.** A single function should not exceed ~100 lines. If it
+   does, extract helpers within the same sub-module file.
+4. **Shared helpers go in a `_helpers.py`** inside the sub-package, not
+   duplicated across files.
 
 ### Splitting rules
 
-When `service.py`, `router.py`, or `schemas.py` grows too large, break it into
-a **sub-package** while keeping imports stable:
+When `service.py`, `router.py`, or `schemas.py` in any domain grows too large,
+convert it into a **sub-package** while keeping imports stable:
 
 ```
-server/app/domains/finance/
+server/app/domains/<domain>/
 ├── __init__.py
-├── router.py               # thin file: mounts sub-routers only
+├── router.py                # thin file: mounts sub-routers only
 ├── schemas/
-│   ├── __init__.py          # re-exports all schema classes
-│   ├── accounts.py
-│   ├── categories.py
-│   ├── transactions.py
-│   ├── transfers.py
-│   ├── allocations.py
-│   ├── csv_import.py
-│   └── balance.py
+│   ├── __init__.py           # re-exports all schema classes
+│   └── <entity>.py           # one file per entity/workflow
 ├── services/
-│   ├── __init__.py          # re-exports all public functions
-│   ├── accounts.py          # create, get, list, update, deactivate
-│   ├── categories.py        # CRUD, seed, tree
-│   ├── allocations.py       # CRUD, validation
-│   ├── transactions.py      # create, get, list, update, void
-│   ├── transfers.py         # create, detect orphans, pair
-│   ├── balance.py           # compute, reconcile, snapshots
-│   └── csv_import.py        # parse, preview, execute, mappings
+│   ├── __init__.py           # re-exports all public functions
+│   ├── <entity>.py           # one file per entity/workflow
+│   └── _helpers.py           # shared internal helpers (if needed)
 └── routers/
-    ├── __init__.py           # re-exports the merged router
-    ├── accounts.py
-    ├── categories.py
-    ├── transactions.py
-    └── ...
+    ├── __init__.py            # re-exports the merged router
+    └── <entity>.py            # one file per entity/workflow
 ```
 
-### Mandatory checks before adding finance code
+**Keep the public API stable.** Sub-package `__init__.py` files must re-export
+everything so that existing imports like
+`from server.app.domains.<domain>.service import X` continue to work after a
+split.
 
-1. **Count lines first.** Before adding a function or endpoint to the finance
-   module, check the target file's line count. If it is above 400 lines, split
-   first, then add.
-2. **One responsibility per file.** Each sub-module file should cover a single
-   entity or workflow (accounts, categories, transactions, etc.). Do not mix
-   unrelated concerns.
-3. **Keep the public API stable.** Sub-package `__init__.py` files must
-   re-export everything so that `from server.app.domains.finance.service import X`
-   continues to work after a split.
-4. **No god functions.** A single function should not exceed ~100 lines. If it
-   does, extract helpers within the same sub-module file.
-5. **Shared helpers go in a `_helpers.py`** inside the sub-package, not
-   duplicated across files.
+### Finance module — current state (as of April 2026)
 
-### Current state (as of April 2026)
+The finance module is the most urgent candidate for splitting:
 
 | File         | Lines | Status     |
 |--------------|-------|------------|
@@ -81,7 +69,7 @@ server/app/domains/finance/
 | `router.py`  | ~1020 | **Needs split** — 25+ endpoints |
 | `schemas.py` | ~500  | Above threshold — split when next touched |
 
-The logical sub-domains for splitting are: **accounts**, **categories**,
+The logical sub-domains for splitting finance are: **accounts**, **categories**,
 **allocations**, **transactions**, **transfers**, **balance/snapshots**, and
 **csv_import**.
 
