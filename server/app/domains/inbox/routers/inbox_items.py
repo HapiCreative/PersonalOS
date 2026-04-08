@@ -19,7 +19,7 @@ from server.app.domains.inbox.schemas import (
     InboxItemResponse,
     InboxItemUpdate,
 )
-from server.app.domains.inbox.service import (
+from server.app.domains.inbox.services import (
     create_inbox_item,
     get_inbox_item,
     list_inbox_items,

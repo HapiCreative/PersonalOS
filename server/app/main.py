@@ -11,7 +11,7 @@ from server.app.core.auth.router import router as auth_router
 from server.app.core.routers.nodes import router as nodes_router
 from server.app.core.routers.edges import router as edges_router
 from server.app.core.routers.search import router as search_router
-from server.app.domains.inbox.router import router as inbox_router
+from server.app.domains.inbox.routers import router as inbox_router
 from server.app.domains.tasks.routers import router as tasks_router, events_router
 from server.app.domains.journal.router import router as journal_router
 from server.app.domains.templates.router import router as templates_router
