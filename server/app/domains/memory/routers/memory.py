@@ -19,7 +19,7 @@ from server.app.domains.memory.schemas import (
     MemoryResponse,
     MemoryUpdate,
 )
-from server.app.domains.memory.service import (
+from server.app.domains.memory.services import (
     create_memory,
     get_memory,
     list_memories,
