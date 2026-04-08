@@ -3,73 +3,73 @@
 ## Project Structure
 
 PersonalOS follows a **domain-driven architecture**. Each domain lives under
-`server/app/domains/<domain>/` with a standard layout:
-
-```
-server/app/domains/<domain>/
-├── __init__.py      # Module docstring only
-├── router.py        # FastAPI endpoints
-├── service.py       # Business logic
-├── schemas.py       # Pydantic request/response models
-```
+`server/app/domains/<domain>/` and uses **sub-packages by default** — never
+generic monolithic files like `service.py` or `router.py`.
 
 Database models live in `server/app/core/models/`.
 
+### Default domain module structure
+
+Every domain module **must** use this sub-package layout. Do not create generic
+top-level `service.py`, `router.py`, or `schemas.py` files — split by entity
+or workflow from the start:
+
+```
+server/app/domains/<domain>/
+├── __init__.py
+├── services/
+│   ├── __init__.py           # re-exports all public functions
+│   ├── <entity_a>.py         # one file per entity/workflow
+│   ├── <entity_b>.py
+│   └── _helpers.py           # shared internal helpers (if needed)
+├── routers/
+│   ├── __init__.py            # re-exports the merged router
+│   ├── <entity_a>.py
+│   └── <entity_b>.py
+└── schemas/
+    ├── __init__.py            # re-exports all schema classes
+    ├── <entity_a>.py
+    └── <entity_b>.py
+```
+
+**Keep the public API stable.** Sub-package `__init__.py` files must re-export
+everything so that imports like
+`from server.app.domains.<domain>.services import X` work from the package
+level.
+
 ## Domain Module File Size Guards
 
-These rules apply to **every** domain module under `server/app/domains/`, not
-just finance. **Do not add logic to an existing file if it would push that file
-beyond 400 lines.** When a file approaches or exceeds this threshold, split it
-into focused sub-modules before adding new code.
+These rules apply to **every** domain module under `server/app/domains/`.
 
 ### Mandatory checks before adding code to any domain
 
-1. **Count lines first.** Before adding a function or endpoint, check the
-   target file's line count. If it is above 400 lines, split first, then add.
-2. **One responsibility per file.** Each sub-module file should cover a single
-   entity or workflow. Do not mix unrelated concerns.
+1. **No generic files.** Never put multiple entities or workflows into one
+   file. Each `services/`, `routers/`, and `schemas/` file must cover a single
+   entity or workflow.
+2. **400-line hard limit per file.** Before adding a function or endpoint,
+   check the target file's line count. If it would exceed 400 lines, break the
+   file into smaller, more focused files first.
 3. **No god functions.** A single function should not exceed ~100 lines. If it
    does, extract helpers within the same sub-module file.
 4. **Shared helpers go in a `_helpers.py`** inside the sub-package, not
    duplicated across files.
 
-### Splitting rules
+### Legacy modules — migration needed
 
-When `service.py`, `router.py`, or `schemas.py` in any domain grows too large,
-convert it into a **sub-package** while keeping imports stable:
+Existing domain modules still use the old generic-file pattern (`service.py`,
+`router.py`, `schemas.py`). When any of these files are next touched, migrate
+them to the sub-package structure above. **Do not add new code to a generic
+file — migrate first, then add.**
 
-```
-server/app/domains/<domain>/
-├── __init__.py
-├── router.py                # thin file: mounts sub-routers only
-├── schemas/
-│   ├── __init__.py           # re-exports all schema classes
-│   └── <entity>.py           # one file per entity/workflow
-├── services/
-│   ├── __init__.py           # re-exports all public functions
-│   ├── <entity>.py           # one file per entity/workflow
-│   └── _helpers.py           # shared internal helpers (if needed)
-└── routers/
-    ├── __init__.py            # re-exports the merged router
-    └── <entity>.py            # one file per entity/workflow
-```
-
-**Keep the public API stable.** Sub-package `__init__.py` files must re-export
-everything so that existing imports like
-`from server.app.domains.<domain>.service import X` continue to work after a
-split.
-
-### Finance module — current state (as of April 2026)
-
-The finance module is the most urgent candidate for splitting:
+**Finance** (most urgent):
 
 | File         | Lines | Status     |
 |--------------|-------|------------|
-| `service.py` | ~1880 | **Needs split** — 40+ functions spanning 7 logical groups |
-| `router.py`  | ~1020 | **Needs split** — 25+ endpoints |
-| `schemas.py` | ~500  | Above threshold — split when next touched |
+| `service.py` | ~1880 | **Needs migration** — 40+ functions spanning 7 logical groups |
+| `router.py`  | ~1020 | **Needs migration** — 25+ endpoints |
+| `schemas.py` | ~500  | **Needs migration** |
 
-The logical sub-domains for splitting finance are: **accounts**, **categories**,
+Target sub-packages for finance: **accounts**, **categories**,
 **allocations**, **transactions**, **transfers**, **balance/snapshots**, and
 **csv_import**.
 
