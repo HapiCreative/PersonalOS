@@ -1313,26 +1313,269 @@ Phase F1 is the critical path. F2 and F3 are sequential (each builds on the prio
 
 -----
 
+# Session Map
+
+Each phase is broken into implementation sessions scoped for one Claude Code context window. Each session references the plan sections it covers, lists the invariants enforced, and specifies the reference documents needed.
+
+## Phase F1: Foundation + Capture — 4 Sessions
+
+### Session F1-A: Database Schema
+
+**Plan sections:** F1.1, F1.2, F1.3
+**Delivers:** All database migrations for Phase F1.
+
+- F1.1: account_nodes table, goal_nodes extension (goal_type, target_amount, current_amount, currency), goal_allocations table, financial_categories table (with system seed data), account_funds_goal edge type-pair constraint, `account` added to nodes.type ENUM
+- F1.2: financial_transactions table (with signed_amount generated column, all 11 transaction_type values, status lifecycle, transfer_group_id), balance_snapshots table (with reconciliation fields). All indexes: (account_id, occurred_at), (user_id, occurred_at), (account_id, external_id) partial, (transfer_group_id) partial, (category_id), (status), (account_id, snapshot_date) unique.
+- F1.3: financial_transaction_history table (append-only audit log)
+- Schema comments tagging CACHED DERIVED and BEHAVIORAL TRACKING fields per S-01
+
+**Invariants enforced at DB level:** F-02 (signed_amount generation with pending → 0), F-04 (balance snapshot uniqueness), F-08 (signed_amount pending behavior), F-12 (category FK prevents deletion)
+**Reference docs:** v6 architecture, finance design Rev 3
+
+-----
+
+### Session F1-B: Backend Core Services
+
+**Plan sections:** F1.1 (services), F1.2 (services, partial), F1.3 (trigger)
+**Delivers:** Backend services and API routes for Core financial entities.
+
+- Account domain: CRUD (create node + companion in transaction), list (active/inactive filter), detail, update, soft deactivate
+- Goal financial extension: validation for F-03 (financial goals require target_amount + currency; general goals require all financial fields null)
+- Category CRUD: hierarchy support, system vs user-created, F-12 deletion blocking
+- Allocation CRUD: F-13 bounds validation (percentage sum ≤ 1.0 per account across all goals), F-06 enforcement (no shadow graph)
+- Edge creation: account_funds_goal with type-pair validation (G-01)
+- Audit trail: database trigger or application middleware ensuring F-11 (every financial_transaction mutation → history row)
+
+**Invariants enforced at app level:** F-01 (transactions never nodes), F-03 (goal field consistency), F-06 (no shadow graph), F-09 (reconciled snapshots authoritative), F-13 (allocation bounds)
+**Reference docs:** v6 architecture, finance design Rev 3
+
+-----
+
+### Session F1-C: Backend Temporal Services
+
+**Plan sections:** F1.2 (services), F1.4
+**Delivers:** Transaction services, balance services, and capture workflows.
+
+- Transaction CRUD: create (with audit history), update (with audit history), void (with audit history). Status lifecycle: pending → posted → settled. Transfer pairing: exactly 2 records per transfer_group_id (F-05), 1 transfer_out + 1 transfer_in, orphan detection.
+- Balance snapshot CRUD: manual entry, reconciliation marking. Balance authority rule: reconciled snapshot = source of truth, computed balance never overrides (F-09).
+- CSV import service: upload → column mapping → saved mappings per account → dedup via UNIQUE(account_id, external_id) → preview with error/duplicate highlighting → bulk insert on confirm. Auto-generate balance_snapshots if balance column present.
+- Manual entry defaults: most recently used account, date = today, status = posted.
+
+**Invariants enforced at app level:** F-02 (positive amounts only), F-05 (transfer pairing), F-08 (balance queries use posted/settled only), F-09 (reconciliation authority), F-11 (audit on every mutation)
+**Reference docs:** v6 architecture, finance design Rev 3
+
+-----
+
+### Session F1-D: Frontend
+
+**Plan sections:** F1.5
+**Delivers:** All Phase F1 frontend work.
+
+- Finance rail entry: `$` icon in nav rail with cyan active accent
+- Account list view: name, type, institution, current balance, active/inactive badge
+- Account detail panel: metadata + transaction list filtered to account + balance history
+- Transaction list: filterable by account, date range, type, category, status, amount range. State chips for pending/posted/settled/uncategorized.
+- Transaction detail sheet: all fields, edit capability, audit history link
+- Category management: CRUD with hierarchy display
+- Manual transaction entry form: account, amount, type, category (hierarchical dropdown), date. Smart defaults (last account, today).
+- CSV import UI: file upload → column mapping → preview → confirm
+- Balance snapshot form: account, balance, date, reconciliation checkbox
+
+**Design tokens:** v6 Section 9.4. **Typography:** v6 Section 9.3. **Layout:** v6 Section 9.1.
+**Reference docs:** v6 architecture, finance design Rev 3
+
+-----
+
+## Phase F2: Intelligence + Decision Surfaces — 5 Sessions
+
+### Session F2-A: Database Schema
+
+**Plan sections:** F2.1, F2.3 (tables only), F2.4 (table only), F2.6 (tables only)
+**Delivers:** All database migrations for Phase F2.
+
+- F2.1: investment_holdings, investment_transactions (with UNIQUE partial on external_id), exchange_rates (with UNIQUE on currency pair + date), market_prices cache (with UNIQUE on symbol + date + source)
+- F2.3: finance_daily_rollups, finance_weekly_rollups, finance_monthly_rollups, portfolio_rollups
+- F2.4: finance_alerts table (with dedup_key, entity_refs JSONB, explanation JSONB, lifecycle status ENUM)
+- F2.6: obligation_nodes (all fields from addendum), obligation_breakdowns (with effective_from/effective_to versioning), obligation_charges_account and obligation_impacts_goal edge type-pair constraints, semantic_reference updates for obligation pairs, `obligation` added to nodes.type ENUM
+- All indexes including obligation partial unique indexes (F-21)
+
+**Invariants enforced at DB level:** F-10 (exchange_rates uniqueness), F-21 (partial unique on obligation_id + normalized_name WHERE effective_to IS NULL)
+**Reference docs:** v6 architecture, finance design Rev 3, obligations addendum
+
+-----
+
+### Session F2-B: Backend Investment + Obligation Services
+
+**Plan sections:** F2.1 (services), F2.6 (services)
+**Delivers:** Backend services and API routes for investment and obligation entities.
+
+- Investment holdings CRUD: snapshot-based, per account per date
+- Investment transactions CRUD: buy, sell, dividend_reinvest, split, merger, spinoff. Corporate action handling (split adjusts quantity + price_per_unit).
+- Exchange rate service: store historical rates, lookup by currency pair + date
+- Market price cache: manual entry for MVP, CRUD
+- Obligation CRUD: create (node + companion in transaction), update, cancel, pause/resume. F-17 (amount model consistency), F-18 (status lifecycle: cancelled requires ended_at), F-19 (next_expected_date is CACHED DERIVED), F-20 (breakdown amount model), F-22 (deprecated breakdown has end date)
+- Obligation breakdown management: add component, version on rate change (set effective_to on old, create new with effective_from), F-21 enforcement
+
+**Invariants enforced at app level:** F-17, F-18, F-19, F-20, F-21, F-22
+**Reference docs:** v6 architecture, finance design Rev 3, obligations addendum
+
+-----
+
+### Session F2-C: Backend Derived Intelligence
+
+**Plan sections:** F2.2, F2.3 (refresh logic)
+**Delivers:** All Derived computation services for Phase F2.
+
+- Net worth engine: sum account balances (most recent snapshot ≤ target date), liabilities subtracted (loan, mortgage, credit_card), multi-currency via exchange_rates at snapshot date (F-10). Liquid net worth excludes illiquid assets.
+- Cashflow analytics: monthly_income, monthly_expenses, net_cashflow, savings_rate, burn_rate. F-07: transfers and investment types excluded.
+- Spending intelligence: category breakdown with hierarchy rollup per period. Trend detection (1.5× rolling 3-month average). Anomaly detection (3× category median with DerivedExplanation). Merchant concentration (30% threshold, fuzzy matching pre-F3). Spend creep (rolling 3-month average comparison across consecutive windows). Leakage candidates (frequency-based heuristics pre-F3).
+- Financial goal progress: current_amount from allocations, progress_pct, projected_completion (linear 90-day), monthly_contribution_needed. Background job updates goal_nodes.current_amount.
+- Investment performance: total_value, total_cost_basis, unrealized_gain, simple_return, dividend_income. Realized gain uses average cost basis (lot tracking in F4).
+- Rollup refresh: daily rollups event-driven on transaction insert/update. Weekly, monthly, portfolio rollups via nightly job.
+
+**Invariants enforced:** F-07 (cashflow exclusion), F-10 (historical FX), D-01 (DerivedExplanation on user-facing outputs), D-02 (all outputs recomputable)
+**Reference docs:** v6 architecture, finance design Rev 3
+
+-----
+
+### Session F2-D: Backend Alerts Engine
+
+**Plan sections:** F2.4, F2.6.6
+**Delivers:** Complete Alerts Engine with rule-based detection.
+
+- finance_alerts service: CRUD, dedup via dedup_key (F-14), lifecycle management (active → dismissed/snoozed/resolved)
+- DerivedAlertCandidate pipeline: each detection function produces { type, severity, entity_refs, explanation (DerivedExplanation), score, dedup_key }
+- Detection loop: configurable schedule (default 6 hours). Deduplicate → upsert. Auto-resolution: if candidate no longer produced on subsequent loop, status → resolved.
+- 8 rule-based alert types: low_cash_runway, large_transaction, uncategorized_aging, duplicate_import, stale_pending, goal_off_track, unreconciled_divergence, broken_transfer
+- 5 rule-based obligation alert types: upcoming_obligation (dynamic lead time: base 3 days, autopay → 1 day, variance → extend, clamped [1,7]), missed_obligation (deferred 5 days if autopay=true), obligation_amount_spike (>20% of expected/seasonal), obligation_rate_change (2 consecutive months ±5%), obligation_expiring (end date within 14 days)
+- Three-tier routing: high → Today Mode (P1/P4), medium → Finance Review Queue, low → finance module only
+- F-15: table is stateful projection, not source of truth
+
+**Invariants enforced:** F-14 (alert dedup), F-15 (projection not truth), D-01 (DerivedExplanation on every alert)
+**Reference docs:** v6 architecture, finance design Rev 3, obligations addendum
+
+-----
+
+### Session F2-E: Frontend
+
+**Plan sections:** F2.5, F2.6.7
+**Delivers:** All Phase F2 frontend work.
+
+- Overview screen: net worth hero with period switcher (chart + narrative update together), liquid net worth toggle. Cashflow cards (income, expenses, net cashflow, savings rate) with pending/posted distinction. Insights panel: active alerts with primary action + explanation, split descriptive from action metrics. Reference UX-to-system mapping (finance doc Section 6).
+- Account list enhancements: reconciliation state badges (current, stale, needs review)
+- Account detail enhancements: balance history, pending transaction total, upcoming obligations placeholder
+- Credit accounts: utilization and statement due context
+- Holdings view: portfolio composition per brokerage, market movement vs contributions (from portfolio_rollups), concentration/diversification warnings
+- Brokerage accounts: liquid vs illiquid treatment
+- Financial goal progress cards: current_amount, target_amount, progress_pct, projected completion. Actionable: transfer, adjust target, revise deadline.
+- Obligation management UI: create/edit form (type, recurrence, amount model, expected amount/range, account, category, autopay, cancellation URL), breakdown editor (add/edit/version components), link to account and goal via edge UI
+- Graph connection verification: all connections from finance doc Section 2.4 and obligations addendum Section 2.4 visible in context layer
+
+**Reference docs:** v6 architecture, finance design Rev 3, obligations addendum
+
+-----
+
+## Phase F3: Behavioral Integration + Patterns — 5 Sessions
+
+### Session F3-A: Database Schema
+
+**Plan sections:** F3.1 (table), F3.2 (table — now renumbered as counterparty), F3.3 (table — now renumbered as counterparty), F3.4 (table), F3.5 (table)
+**Delivers:** All database migrations for Phase F3.
+
+- obligation_events table with indexes: (obligation_id, expected_for_date), (user_id, expected_for_date), (transaction_id) partial WHERE NOT NULL
+- counterparty_entities table with UNIQUE(user_id, canonical_name). Enable counterparty_entity_id FK on financial_transactions (was nullable/deferred). Add index (counterparty_entity_id) partial WHERE NOT NULL on financial_transactions.
+- recurring_patterns table
+- obligation_seasonal_profiles table with indexes: (obligation_id, period_type, period_value), (obligation_id, breakdown_id)
+
+**Invariants enforced at DB level:** F-25 (obligation event uniqueness — partial unique index)
+**Reference docs:** v6 architecture, finance design Rev 3, obligations addendum
+
+-----
+
+### Session F3-B: Backend Matching + Patterns
+
+**Plan sections:** F3.1 (services), F3.3 (services), F3.4 (services), F3.6
+**Delivers:** Obligation events, transaction matching, counterparty resolution, and recurring pattern detection.
+
+- Obligation events service: CRUD with F-25 uniqueness (one terminal event per obligation per expected_for_date), F-26 ownership alignment. Correct data flow: transaction posts → Derived matching → obligation_event created (Temporal) → Derived recomputes next_expected_date. Derived never mutates Derived directly.
+- Transaction-to-obligation matching: weighted confidence (counterparty_entity 0.45, amount within range 0.20, timing ±5 days 0.20, category 0.10, account 0.05). Auto-link ≥ 0.7, suggestion 0.4–0.7, below 0.4 no match. Match accepted → obligation_event(paid). No match by expected + lead_time → obligation_event(missed) → Alerts Engine fires.
+- Counterparty entity resolution: on transaction import/create, match raw counterparty against aliases. Match found → set counterparty_entity_id, auto-populate category if transaction has none. No match → store raw string. Background job clusters similar raw strings and suggests new entities. Merge/rename updates all referenced transactions.
+- Recurring pattern detection: group transactions by (account_id, counterparty/entity, approximate amount). 3+ occurrences → classify frequency from median interval (~7d weekly, ~14d biweekly, ~30d monthly, ~90d quarterly, ~365d annual). Confidence from interval regularity + amount consistency. F-16: < 0.5 not surfaced, 0.5–0.7 suggestions, > 0.7 auto-classified. Two-stage lifecycle: high-confidence pattern → user confirms → promotes to obligation_node (Promotion Contract, v6 Section 5.8, provenance edge).
+
+**Invariants enforced:** F-16 (confidence thresholds), F-25 (event uniqueness), F-26 (ownership alignment), B-01 (Promotion Contract)
+**Reference docs:** v6 architecture, finance design Rev 3, obligations addendum
+
+-----
+
+### Session F3-C: Backend Derived Intelligence
+
+**Plan sections:** F3.5, F3.8
+**Delivers:** Seasonal intelligence and forecasting engine.
+
+- Seasonal intelligence: obligation_seasonal_profiles computation. Confidence calculation: `confidence = 0.4 × min(sample_count/6, 1.0) + 0.35 × variance_stability + 0.25 × recency_score`. Variance stability = 1 - CV, clamped [0,1]. Recency score exponential decay, half-life 12 months. Seasonality detection (6-step algorithm from addendum Section 4.3): collect 24 months weighted by recency → annual baseline (weighted median, p25, p75) → group by period → compute seasonality_strength per period → flag is_seasonal if 2+ consecutive periods |strength| > 0.5 → exclude confidence < 0.5 from alerting. F-23, F-24 enforcement. Rate change detection: 2 consecutive months at new amount ±5% → recommendation to update obligation.
+- Downstream consumer integration: anomaly detection uses seasonal profiles (eliminates false positives), forecasting engine uses seasonal profiles for variable obligations, Alerts Engine uses seasonally-aware thresholds, Monthly Review references seasonal context.
+- Forecasting engine (4 forecasts, all with DerivedExplanation): month-end cash forecast (transactions + recurring_patterns + balance_snapshots), goal completion forecast (actual contribution trend), burn rate forecast (liquid net worth / monthly_expenses, alert if < 3 months), contribution gap forecast (monthly amount to recover off-track goal).
+
+**Invariants enforced:** F-23 (seasonal confidence threshold), F-24 (consecutive deviation), D-01 (DerivedExplanation on all forecasts)
+**Reference docs:** v6 architecture, finance design Rev 3, obligations addendum
+
+-----
+
+### Session F3-D: Backend Behavioral Workflows
+
+**Plan sections:** F3.7, F3.9, F3.10, F3.11 (backend portions)
+**Delivers:** Pattern-based alerts, Today Mode integration, review integration, AI modes, capture, cleanup.
+
+- Pattern-based alerts (9 types added to Alerts Engine): subscription_detected, spend_creep, impulse_cluster, income_irregularity, missed_obligation, portfolio_drift, obligation_creep, obligation_concentration, obligation_optimization. All route through existing three-tier model.
+- Today Mode integration: finance items sourced from Alerts Engine high-severity routing through existing P1 (due/overdue) and P4 (goal nudges) channels. Finance blocks: cash safety warning, goal contribution nudge, anomaly alert, upcoming obligation, missed obligation. Each with one clear action + explanation. U-01 (max 2 unsolicited) and U-02 (10-item cap) enforced.
+- Weekly review financial section: net worth/liquid cash/spending changes (finance_weekly_rollups), category variance flags, uncategorized/unreconciled/suspicious transactions (finance_alerts active), goal funding pace. Output → weekly_snapshots.notes.
+- Monthly review financial section: month-end net worth change (finance_monthly_rollups), savings rate + category variances vs prior month + 3-month baseline, goal progress delta + estimated completion, investment performance split (market movement vs deposits/withdrawals vs realized gains from portfolio_rollups). Recommendations classified per D-04, dismissible.
+- AI mode financial extensions: Ask (transaction queries), Plan (financial goals + contributions), Reflect (cashflow narrative), Improve (trends, anomalies, leakage). New retrieval mode: financial_qa (account 1.0, goal(financial) 0.8, memory 0.4, 90 days, active accounts).
+- Cmd+K financial capture: $ or number triggers financial quick-capture. Parseable → financial_transaction. Ambiguous → inbox_item. Source connections: source items → accounts/goals via captured_for, memory → accounts via semantic_reference.
+- Financial cleanup queues (6, populated from medium-severity alerts): uncategorized transactions, stale accounts, unreconciled balances, broken transfers, pending transactions, duplicate imports.
+
+**Invariants enforced:** U-01 (max 2 unsolicited), U-02 (10-item Today Mode cap), D-04 (analytics output classification), B-01 (Promotion Contract for source connections)
+**Reference docs:** v6 architecture, finance design Rev 3, obligations addendum
+
+-----
+
+### Session F3-E: Frontend
+
+**Plan sections:** F3.9 (UI), F3.10 (UI), F3.11 (UI)
+**Delivers:** All Phase F3 frontend work.
+
+- Today Mode finance items: cash safety warning, goal contribution nudge, anomaly alert, upcoming/missed obligation. Each with one clear action + explanation. Respects attention budget.
+- Weekly review: financial section with variance flags, alert summary, goal funding status
+- Monthly review: financial section with investment performance attribution, recommendations (dismissible)
+- Obligation detail pane: context layer following v6 Section 9.2 priority order — (1) backlinks: goals, memories, sources, (2) outgoing: account it charges, related obligations/bundles, (3) provenance: link to originating recurring_pattern if promoted, (4) activity: last 3 matched transactions, next expected date, rate change history, (5) AI suggestions: related obligations to bundle/compare. All within U-03 (8-item cap).
+- Cleanup queue UI: 6 queues with batch actions per queue definition
+- Cmd+K: $ trigger in command palette, financial quick-capture flow
+- Source → account/goal edge creation via captured_for in edge UI
+
+**Reference docs:** v6 architecture, finance design Rev 3, obligations addendum
+
+-----
+
 # Implementation Notes
 
 ## Session Strategy
 
-Each phase should be executed in a fresh Claude Code context window. Pass the following as context:
+Each session should be executed in a fresh Claude Code context window. Pass the following as context:
 
 1. `personal-os-architecture-v6.docx` — the constitutional reference
 1. `finance-module-design-rev3.docx` — the canonical finance spec
-1. `obligations-addendum.docx` — the obligations spec (for F3)
-1. This implementation plan — scoped to the current phase
+1. `obligations-addendum.docx` — the obligations spec (needed from F2-A onward)
+1. `finance-implementation-plan.md` — this plan, scoped to the current session
 
 ## Testing Strategy
 
-- **Schema invariants**: write database-level constraints and triggers for hard invariants (F-02 signed_amount generation, F-04 uniqueness, F-05 transfer pairing count, F-11 audit trigger)
-- **Application invariants**: write validation middleware for soft invariants (F-03 goal field consistency, F-13 allocation bounds, F-17/F-20 amount model consistency)
-- **Integration tests**: per-phase acceptance criteria map directly to test cases
+- **Schema invariants**: write database-level constraints and triggers for hard invariants (F-02 signed_amount generation, F-04 uniqueness, F-05 transfer pairing count, F-11 audit trigger, F-21 partial unique, F-25 event uniqueness)
+- **Application invariants**: write validation middleware for soft invariants (F-03 goal field consistency, F-13 allocation bounds, F-17/F-20 amount model consistency, F-16 confidence thresholds)
+- **Integration tests**: per-session acceptance criteria from the plan sections map directly to test cases
 
 ## Migration Strategy
 
-- Each phase produces its own Alembic migration file(s)
+- Each session that includes schema work produces its own Alembic migration file(s)
 - Migrations are additive — no destructive changes to existing tables
 - System-seeded categories created via data migration, not application code
 
