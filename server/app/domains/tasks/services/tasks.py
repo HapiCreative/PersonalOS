@@ -20,8 +20,8 @@ from server.app.core.models.enums import NodeType, TaskStatus, TaskPriority
 
 
 # Invariant B-03: Valid state transitions
-# todo → in_progress → done (non-recurring only)
-# todo → cancelled, in_progress → cancelled
+# todo -> in_progress -> done (non-recurring only)
+# todo -> cancelled, in_progress -> cancelled
 VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
     TaskStatus.TODO: {TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED},
     TaskStatus.IN_PROGRESS: {TaskStatus.DONE, TaskStatus.CANCELLED},
