@@ -808,3 +808,37 @@ class FinancialTransactionHistory(Base):
         Index("idx_fin_tx_history_transaction", "transaction_id"),
         Index("idx_fin_tx_history_changed_at", "changed_at"),
     )
+
+
+class CsvImportMapping(Base):
+    """
+    Section 5.2: Saved CSV column mappings per account.
+    Behavioral layer — stores user's column mapping preferences for repeat imports.
+    """
+    __tablename__ = "csv_import_mappings"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mapping_name: Mapped[str] = mapped_column(Text, nullable=False, default="default")
+    column_mapping: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        Index("uq_csv_import_mappings_account_name", "account_id", "mapping_name", unique=True),
+        Index("idx_csv_import_mappings_user", "user_id"),
+        Index("idx_csv_import_mappings_account", "account_id"),
+    )
