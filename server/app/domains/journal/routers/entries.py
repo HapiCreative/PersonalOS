@@ -19,7 +19,7 @@ from server.app.domains.journal.schemas import (
     JournalResponse,
     JournalUpdate,
 )
-from server.app.domains.journal.service import (
+from server.app.domains.journal.services import (
     create_journal_entry,
     get_journal_entry,
     list_journal_entries,

@@ -1,5 +1,5 @@
 """
-Journal domain service (Section 2.4, 8.1).
+Journal entry service (Section 2.4, 8.1).
 Handles journal entry CRUD with mood and word count tracking.
 """
 
