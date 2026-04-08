@@ -49,6 +49,10 @@ EDGE_TYPE_PAIR_CONSTRAINTS: dict[EdgeRelationType, list[tuple[NodeType, NodeType
     EdgeRelationType.CAPTURED_FOR: [
         (NodeType.SOURCE_ITEM, None),  # None means any target type
     ],
+    # Finance Module (Section 2.3): account_funds_goal
+    EdgeRelationType.ACCOUNT_FUNDS_GOAL: [
+        (NodeType.ACCOUNT, NodeType.GOAL),
+    ],
 }
 
 # Invariant G-02: Allowed pairs for semantic_reference
