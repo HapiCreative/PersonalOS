@@ -44,7 +44,7 @@ from server.app.domains.finance.schemas import (
     TransactionUpdate,
     TransferCreate,
 )
-from server.app.domains.finance.service import (
+from server.app.domains.finance.services import (
     VALID_STATUS_TRANSITIONS,
     validate_goal_financial_fields,
     _map_csv_row_to_transaction,
@@ -430,12 +430,12 @@ class TestSystemDefaultCategories:
 
     def test_default_categories_count(self):
         """Should have 16 system default categories."""
-        from server.app.domains.finance.service import SYSTEM_DEFAULT_CATEGORIES
+        from server.app.domains.finance.services import SYSTEM_DEFAULT_CATEGORIES
         assert len(SYSTEM_DEFAULT_CATEGORIES) == 16
 
     def test_default_categories_names(self):
         """Default category names should match the spec."""
-        from server.app.domains.finance.service import SYSTEM_DEFAULT_CATEGORIES
+        from server.app.domains.finance.services import SYSTEM_DEFAULT_CATEGORIES
         expected = [
             "Groceries", "Rent/Mortgage", "Utilities", "Dining",
             "Transportation", "Entertainment", "Healthcare", "Insurance",
@@ -447,7 +447,7 @@ class TestSystemDefaultCategories:
 
     def test_default_categories_sort_order(self):
         """Sort order should be sequential 1-16."""
-        from server.app.domains.finance.service import SYSTEM_DEFAULT_CATEGORIES
+        from server.app.domains.finance.services import SYSTEM_DEFAULT_CATEGORIES
         orders = [order for _, order in SYSTEM_DEFAULT_CATEGORIES]
         assert orders == list(range(1, 17))
 
