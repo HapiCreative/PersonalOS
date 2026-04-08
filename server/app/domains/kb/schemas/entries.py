@@ -1,4 +1,4 @@
-"""Pydantic schemas for KB operations (Section 2.4, Section 7)."""
+"""Pydantic schemas for KB entry operations (Section 2.4, Section 7)."""
 
 import uuid
 from datetime import datetime
@@ -44,17 +44,3 @@ class KBResponse(BaseModel):
 class KBListResponse(BaseModel):
     items: list[KBResponse]
     total: int
-
-
-class KBCompileRequest(BaseModel):
-    """Request to trigger or advance the compilation pipeline."""
-    action: str = Field(
-        description="Pipeline action: 'compile' to start compilation, 'accept' to accept draft, 'reject' to send back to review"
-    )
-
-
-class KBCompileResponse(BaseModel):
-    node_id: uuid.UUID
-    compile_status: CompileStatus
-    pipeline_stage: PipelineStage
-    compile_version: int
