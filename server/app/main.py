@@ -18,7 +18,7 @@ from server.app.domains.templates.router import router as templates_router
 from server.app.domains.sources.routers import router as sources_router
 from server.app.domains.kb.router import router as kb_router
 from server.app.domains.memory.router import router as memory_router
-from server.app.domains.goals.router import router as goals_router
+from server.app.domains.goals.routers import router as goals_router
 from server.app.behavioral.router import router as today_router
 from server.app.behavioral.cleanup_router import router as cleanup_router
 from server.app.derived.router import router as derived_router

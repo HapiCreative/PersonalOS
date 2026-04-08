@@ -1,5 +1,5 @@
 """
-Pydantic schemas for goal operations (Section 2.4).
+Pydantic schemas for goal CRUD operations (Section 2.4).
 Invariant D-03: progress is CACHED DERIVED, non-canonical.
 """
 
@@ -55,20 +55,3 @@ class GoalResponse(BaseModel):
 class GoalListResponse(BaseModel):
     items: list[GoalResponse]
     total: int
-
-
-class GoalLinkedTaskResponse(BaseModel):
-    """A task linked to a goal via goal_tracks_task edge."""
-    node_id: uuid.UUID
-    title: str
-    status: str
-    priority: str
-    due_date: date | None
-    is_recurring: bool
-    edge_id: uuid.UUID
-    edge_weight: float
-
-
-class GoalWithTasksResponse(GoalResponse):
-    """Goal response including linked tasks."""
-    linked_tasks: list[GoalLinkedTaskResponse] = Field(default_factory=list)
