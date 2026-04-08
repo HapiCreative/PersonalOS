@@ -1227,3 +1227,214 @@ export interface CleanupActionResponsePB {
   total_affected: number;
   details?: Record<string, unknown>;
 }
+
+// =============================================================================
+// Finance Module (Finance Design Rev 3)
+// =============================================================================
+
+// Account type (Section 2.1)
+export type AccountType =
+  | 'checking'
+  | 'savings'
+  | 'credit_card'
+  | 'brokerage'
+  | 'crypto_wallet'
+  | 'cash'
+  | 'loan'
+  | 'mortgage'
+  | 'other';
+
+// Transaction type (Section 3.1)
+export type FinancialTransactionType =
+  | 'income'
+  | 'expense'
+  | 'transfer_in'
+  | 'transfer_out'
+  | 'investment_buy'
+  | 'investment_sell'
+  | 'dividend'
+  | 'interest'
+  | 'fee'
+  | 'refund'
+  | 'adjustment';
+
+// Transaction status (Section 3.1)
+export type FinancialTransactionStatus = 'pending' | 'posted' | 'settled';
+
+// Category source (Section 3.1)
+export type CategorySourceType = 'manual' | 'system_suggested' | 'imported';
+
+// Transaction source (Section 3.1)
+export type TransactionSourceType = 'manual' | 'csv_import' | 'api_sync';
+
+// Balance snapshot source (Section 3.2)
+export type BalanceSnapshotSourceType = 'manual' | 'csv_import' | 'api_sync' | 'computed';
+
+// Transaction change type (Section 3.6)
+export type TransactionChangeType = 'create' | 'update' | 'void';
+
+// Account response (Section 2.1)
+export interface AccountResponse {
+  node_id: string;
+  title: string;
+  summary: string | null;
+  account_type: AccountType;
+  institution: string | null;
+  currency: string;
+  account_number_masked: string | null;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface AccountListResponse {
+  items: AccountResponse[];
+  total: number;
+}
+
+// Transaction response (Section 3.1)
+export interface FinancialTransactionResponse {
+  id: string;
+  user_id: string;
+  account_id: string;
+  transaction_type: FinancialTransactionType;
+  status: FinancialTransactionStatus;
+  amount: string; // Decimal as string
+  signed_amount: string | null;
+  currency: string;
+  category_id: string | null;
+  subcategory_id: string | null;
+  category_source: CategorySourceType;
+  counterparty: string | null;
+  counterparty_entity_id: string | null;
+  description: string | null;
+  occurred_at: string;
+  posted_at: string | null;
+  source: TransactionSourceType;
+  external_id: string | null;
+  transfer_group_id: string | null;
+  tags: string[] | null;
+  is_voided: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FinancialTransactionListResponse {
+  items: FinancialTransactionResponse[];
+  total: number;
+}
+
+// Transaction history / audit trail (Section 3.6)
+export interface TransactionHistoryResponse {
+  id: string;
+  transaction_id: string;
+  version: number;
+  snapshot: Record<string, unknown>;
+  change_type: TransactionChangeType;
+  changed_by: string;
+  changed_at: string;
+}
+
+export interface TransactionHistoryListResponse {
+  items: TransactionHistoryResponse[];
+  total: number;
+}
+
+// Manual entry defaults (Section 5.2)
+export interface ManualEntryDefaultsResponse {
+  last_used_account_id: string | null;
+  last_used_account_title: string | null;
+  default_date: string;
+  default_status: FinancialTransactionStatus;
+}
+
+// Category response (Section 2.5)
+export interface FinancialCategoryResponse {
+  id: string;
+  user_id: string;
+  name: string;
+  parent_id: string | null;
+  icon: string | null;
+  is_system: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface FinancialCategoryTreeResponse extends FinancialCategoryResponse {
+  children: FinancialCategoryTreeResponse[];
+}
+
+export interface FinancialCategoryListResponse {
+  items: FinancialCategoryResponse[];
+  total: number;
+}
+
+// Balance snapshot response (Section 3.2)
+export interface BalanceSnapshotResponse {
+  id: string;
+  user_id: string;
+  account_id: string;
+  balance: string; // Decimal as string
+  currency: string;
+  snapshot_date: string;
+  source: BalanceSnapshotSourceType;
+  is_reconciled: boolean;
+  reconciled_at: string | null;
+  created_at: string;
+}
+
+export interface BalanceSnapshotListResponse {
+  items: BalanceSnapshotResponse[];
+  total: number;
+}
+
+// Computed balance response (Section 3.2)
+export interface ComputedBalanceResponse {
+  account_id: string;
+  balance: string; // Decimal as string
+  currency: string;
+  as_of_date: string;
+  last_reconciled_snapshot: BalanceSnapshotResponse | null;
+  transactions_since_snapshot: number;
+  is_computed: boolean;
+}
+
+// CSV import types (Section 5.2)
+export interface CsvColumnMappingResponse {
+  id: string;
+  user_id: string;
+  account_id: string;
+  mapping_name: string;
+  column_mapping: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CsvPreviewRow {
+  row_number: number;
+  data: Record<string, unknown>;
+  transaction: Record<string, unknown> | null;
+  errors: string[];
+  is_duplicate: boolean;
+  duplicate_transaction_id: string | null;
+}
+
+export interface CsvPreviewResponse {
+  total_rows: number;
+  valid_rows: number;
+  error_rows: number;
+  duplicate_rows: number;
+  rows: CsvPreviewRow[];
+  detected_columns: string[];
+  has_balance_column: boolean;
+}
+
+export interface CsvImportResult {
+  imported_count: number;
+  skipped_duplicates: number;
+  error_count: number;
+  balance_snapshots_created: number;
+  transaction_ids: string[];
+}

@@ -119,6 +119,26 @@ import type {
   FocusStatsResponse,
   CleanupActionPB,
   CleanupActionResponsePB,
+  // Finance Module
+  AccountResponse,
+  AccountListResponse,
+  AccountType,
+  FinancialTransactionResponse,
+  FinancialTransactionListResponse,
+  FinancialTransactionType,
+  FinancialTransactionStatus,
+  TransactionHistoryListResponse,
+  ManualEntryDefaultsResponse,
+  FinancialCategoryResponse,
+  FinancialCategoryListResponse,
+  FinancialCategoryTreeResponse,
+  BalanceSnapshotResponse,
+  BalanceSnapshotListResponse,
+  ComputedBalanceResponse,
+  BalanceSnapshotSourceType,
+  CsvColumnMappingResponse,
+  CsvPreviewResponse,
+  CsvImportResult,
 } from '../types';
 
 // Auth
@@ -843,4 +863,194 @@ export const cleanupPBApi = {
     target_project_id?: string;
     target_goal_id?: string;
   }) => api.post<CleanupActionResponsePB>('/cleanup/action', data),
+};
+
+// =============================================================================
+// Finance Module (Finance Design Rev 3)
+// =============================================================================
+
+// Accounts
+export const financeAccountsApi = {
+  list: (params?: { is_active?: boolean; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.is_active !== undefined) query.set('is_active', String(params.is_active));
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<AccountListResponse>(`/finance/accounts?${query}`);
+  },
+  get: (nodeId: string) => api.get<AccountResponse>(`/finance/accounts/${nodeId}`),
+  create: (data: {
+    title: string;
+    account_type: AccountType;
+    currency: string;
+    summary?: string;
+    institution?: string;
+    account_number_masked?: string;
+    notes?: string;
+  }) => api.post<AccountResponse>('/finance/accounts', data),
+  update: (nodeId: string, data: {
+    title?: string;
+    summary?: string;
+    account_type?: AccountType;
+    institution?: string;
+    currency?: string;
+    account_number_masked?: string;
+    is_active?: boolean;
+    notes?: string;
+  }) => api.put<AccountResponse>(`/finance/accounts/${nodeId}`, data),
+  deactivate: (nodeId: string) =>
+    api.post<AccountResponse>(`/finance/accounts/${nodeId}/deactivate`),
+  getBalance: (accountId: string, asOfDate?: string) => {
+    const query = new URLSearchParams();
+    if (asOfDate) query.set('as_of_date', asOfDate);
+    return api.get<ComputedBalanceResponse>(`/finance/accounts/${accountId}/balance?${query}`);
+  },
+};
+
+// Transactions
+export const financeTransactionsApi = {
+  list: (params?: {
+    account_id?: string;
+    include_voided?: boolean;
+    status?: FinancialTransactionStatus;
+    category_id?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.account_id) query.set('account_id', params.account_id);
+    if (params?.include_voided) query.set('include_voided', 'true');
+    if (params?.status) query.set('status', params.status);
+    if (params?.category_id) query.set('category_id', params.category_id);
+    if (params?.date_from) query.set('date_from', params.date_from);
+    if (params?.date_to) query.set('date_to', params.date_to);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<FinancialTransactionListResponse>(`/finance/transactions?${query}`);
+  },
+  get: (id: string) => api.get<FinancialTransactionResponse>(`/finance/transactions/${id}`),
+  create: (data: {
+    account_id: string;
+    transaction_type: FinancialTransactionType;
+    amount: number;
+    currency: string;
+    status?: FinancialTransactionStatus;
+    category_id?: string;
+    subcategory_id?: string;
+    counterparty?: string;
+    description?: string;
+    occurred_at?: string;
+    posted_at?: string;
+    tags?: string[];
+  }) => api.post<FinancialTransactionResponse>('/finance/transactions', data),
+  update: (id: string, data: {
+    amount?: number;
+    transaction_type?: FinancialTransactionType;
+    status?: FinancialTransactionStatus;
+    category_id?: string | null;
+    subcategory_id?: string | null;
+    counterparty?: string | null;
+    description?: string | null;
+    occurred_at?: string;
+    posted_at?: string | null;
+    tags?: string[] | null;
+  }) => api.put<FinancialTransactionResponse>(`/finance/transactions/${id}`, data),
+  void: (id: string) =>
+    api.post<FinancialTransactionResponse>(`/finance/transactions/${id}/void`),
+  getHistory: (id: string) =>
+    api.get<TransactionHistoryListResponse>(`/finance/transactions/${id}/history`),
+  getDefaults: () =>
+    api.get<ManualEntryDefaultsResponse>('/finance/defaults/manual-entry'),
+};
+
+// Categories
+export const financeCategoriesApi = {
+  list: (parentId?: string | null) => {
+    const query = new URLSearchParams();
+    if (parentId === null) query.set('parent_id', '');
+    else if (parentId) query.set('parent_id', parentId);
+    return api.get<FinancialCategoryListResponse>(`/finance/categories?${query}`);
+  },
+  tree: () => api.get<FinancialCategoryTreeResponse[]>('/finance/categories/tree'),
+  get: (id: string) => api.get<FinancialCategoryResponse>(`/finance/categories/${id}`),
+  create: (data: { name: string; parent_id?: string; icon?: string; sort_order?: number }) =>
+    api.post<FinancialCategoryResponse>('/finance/categories', data),
+  update: (id: string, data: { name?: string; parent_id?: string; icon?: string; sort_order?: number }) =>
+    api.put<FinancialCategoryResponse>(`/finance/categories/${id}`, data),
+  delete: (id: string) => api.delete<void>(`/finance/categories/${id}`),
+  seed: () => api.post<FinancialCategoryResponse[]>('/finance/categories/seed'),
+};
+
+// Balance Snapshots
+export const financeBalanceApi = {
+  listSnapshots: (accountId: string, params?: { limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return api.get<BalanceSnapshotListResponse>(`/finance/balance-snapshots/${accountId}?${query}`);
+  },
+  createSnapshot: (data: {
+    account_id: string;
+    balance: number;
+    currency: string;
+    snapshot_date: string;
+    source?: BalanceSnapshotSourceType;
+    is_reconciled?: boolean;
+  }) => api.post<BalanceSnapshotResponse>('/finance/balance-snapshots', data),
+  reconcile: (snapshotId: string, isReconciled: boolean) =>
+    api.put<BalanceSnapshotResponse>(`/finance/balance-snapshots/${snapshotId}/reconcile`, { is_reconciled: isReconciled }),
+};
+
+// CSV Import
+export const financeCsvApi = {
+  previewWithMapping: (accountId: string, file: File, mapping: Record<string, string>) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const query = new URLSearchParams();
+    query.set('account_id', accountId);
+    query.set('mapping', JSON.stringify(mapping));
+    return fetch(`/api/finance/csv-import/preview-with-mapping?${query}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('pos_token')}`,
+      },
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Request failed: ${res.status}`);
+      }
+      return res.json() as Promise<CsvPreviewResponse>;
+    });
+  },
+  executeWithMapping: (accountId: string, file: File, mapping: Record<string, string>, saveMappingName?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const query = new URLSearchParams();
+    query.set('account_id', accountId);
+    query.set('mapping', JSON.stringify(mapping));
+    if (saveMappingName) {
+      query.set('save_mapping', 'true');
+      query.set('mapping_name', saveMappingName);
+    }
+    return fetch(`/api/finance/csv-import/execute-with-mapping?${query}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('pos_token')}`,
+      },
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Request failed: ${res.status}`);
+      }
+      return res.json() as Promise<CsvImportResult>;
+    });
+  },
+  getMappings: (accountId: string) =>
+    api.get<CsvColumnMappingResponse[]>(`/finance/csv-import/mappings/${accountId}`),
+  saveMapping: (data: { account_id: string; mapping_name: string; column_mapping: Record<string, string> }) =>
+    api.post<CsvColumnMappingResponse>('/finance/csv-import/mappings', data),
 };
