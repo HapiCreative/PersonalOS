@@ -16,7 +16,7 @@ from server.app.domains.tasks.routers import router as tasks_router, events_rout
 from server.app.domains.journal.router import router as journal_router
 from server.app.domains.templates.router import router as templates_router
 from server.app.domains.sources.routers import router as sources_router
-from server.app.domains.kb.router import router as kb_router
+from server.app.domains.kb.routers import router as kb_router
 from server.app.domains.memory.router import router as memory_router
 from server.app.domains.goals.routers import router as goals_router
 from server.app.behavioral.router import router as today_router
