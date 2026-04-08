@@ -21,9 +21,10 @@ import {
   Sparkles,
   Settings,
   BarChart3,
+  DollarSign,
 } from 'lucide-react';
 
-export type NavModule = 'today' | 'inbox' | 'tasks' | 'journal' | 'goals' | 'projects' | 'kb' | 'sources' | 'memory' | 'review' | 'templates' | 'cleanup' | 'ai' | 'analytics' | 'settings';
+export type NavModule = 'today' | 'inbox' | 'tasks' | 'journal' | 'goals' | 'projects' | 'kb' | 'sources' | 'memory' | 'finance' | 'review' | 'templates' | 'cleanup' | 'ai' | 'analytics' | 'settings';
 
 interface RailProps {
   active: NavModule;
@@ -41,6 +42,7 @@ const navItems: { id: NavModule; icon: typeof Inbox; label: string }[] = [
   { id: 'kb', icon: FileText, label: 'KB' },
   { id: 'sources', icon: Search, label: 'Sources' },
   { id: 'memory', icon: Brain, label: 'Memory' },
+  { id: 'finance', icon: DollarSign, label: 'Finance' },
   { id: 'ai', icon: Sparkles, label: 'AI' },
   { id: 'review', icon: ClipboardList, label: 'Review' },
   { id: 'cleanup', icon: Trash2, label: 'Cleanup' },
