@@ -7,6 +7,34 @@ from server.app.domains.finance.services.accounts import (
     list_accounts,
     update_account,
 )
+from server.app.domains.finance.services.cashflow import compute_cashflow
+from server.app.domains.finance.services.goal_progress import (
+    compute_goal_progress,
+    list_goal_progress,
+    refresh_all_goal_progress,
+)
+from server.app.domains.finance.services.investment_performance import (
+    compute_account_performance,
+    compute_aggregate_performance,
+)
+from server.app.domains.finance.services.net_worth import compute_net_worth
+from server.app.domains.finance.services.rollups import (
+    backfill_daily_rollups,
+    compute_finance_daily_rollup,
+    compute_finance_monthly_rollup,
+    compute_finance_weekly_rollup,
+    compute_portfolio_rollup,
+    refresh_daily_rollup_for_transaction,
+    refresh_nightly_rollups,
+)
+from server.app.domains.finance.services.spending import (
+    compute_category_breakdown,
+    compute_leakage_candidates,
+    compute_merchant_concentration,
+    compute_spend_creep,
+    compute_spending_anomalies,
+    compute_spending_trends,
+)
 from server.app.domains.finance.services.allocations import (
     create_allocation,
     delete_allocation,
@@ -105,9 +133,25 @@ __all__ = [
     "VALID_STATUS_TRANSITIONS",
     "_map_csv_row_to_transaction",
     "_parse_csv_content",
+    "backfill_daily_rollups",
     "cancel_obligation",
     "compute_account_balance",
+    "compute_account_performance",
+    "compute_aggregate_performance",
+    "compute_cashflow",
+    "compute_category_breakdown",
+    "compute_finance_daily_rollup",
+    "compute_finance_monthly_rollup",
+    "compute_finance_weekly_rollup",
+    "compute_goal_progress",
+    "compute_leakage_candidates",
+    "compute_merchant_concentration",
+    "compute_net_worth",
     "compute_next_expected_date",
+    "compute_portfolio_rollup",
+    "compute_spend_creep",
+    "compute_spending_anomalies",
+    "compute_spending_trends",
     "create_account",
     "create_allocation",
     "create_balance_snapshot",
@@ -152,6 +196,7 @@ __all__ = [
     "list_categories",
     "list_categories_tree",
     "list_exchange_rates",
+    "list_goal_progress",
     "list_holdings",
     "list_investment_transactions",
     "list_market_prices",
@@ -160,6 +205,9 @@ __all__ = [
     "pause_obligation",
     "preview_csv_import",
     "reconcile_balance_snapshot",
+    "refresh_all_goal_progress",
+    "refresh_daily_rollup_for_transaction",
+    "refresh_nightly_rollups",
     "resume_obligation",
     "save_csv_mapping",
     "seed_categories_for_user",

@@ -8,12 +8,16 @@ from server.app.domains.finance.routers.balance import router as balance_router
 from server.app.domains.finance.routers.categories import router as categories_router
 from server.app.domains.finance.routers.csv_import import router as csv_import_router
 from server.app.domains.finance.routers.exchange_rates import router as exchange_rates_router
+from server.app.domains.finance.routers.intelligence import (
+    router as intelligence_router,
+)
 from server.app.domains.finance.routers.investments import router as investments_router
 from server.app.domains.finance.routers.market_prices import router as market_prices_router
 from server.app.domains.finance.routers.obligation_breakdowns import (
     router as obligation_breakdowns_router,
 )
 from server.app.domains.finance.routers.obligations import router as obligations_router
+from server.app.domains.finance.routers.rollups import router as rollups_router
 from server.app.domains.finance.routers.transactions import router as transactions_router
 from server.app.domains.finance.routers.transfers import router as transfers_router
 
@@ -33,3 +37,7 @@ router.include_router(exchange_rates_router)
 router.include_router(market_prices_router)
 router.include_router(obligations_router)
 router.include_router(obligation_breakdowns_router)
+
+# F2-C: Derived intelligence + rollups
+router.include_router(intelligence_router)
+router.include_router(rollups_router)
