@@ -23,6 +23,13 @@ from server.app.core.models.node import (
 from server.app.domains.finance.services.categories import get_category
 
 
+def _rollup_refresh_fn():  # lazy import — avoid circular with rollups sub-package
+    from server.app.domains.finance.services.rollups.daily import (
+        refresh_daily_rollup_for_transaction,
+    )
+    return refresh_daily_rollup_for_transaction
+
+
 # Valid status transitions: pending → posted → settled
 VALID_STATUS_TRANSITIONS: dict[FinancialTransactionStatus, list[FinancialTransactionStatus]] = {
     FinancialTransactionStatus.PENDING: [FinancialTransactionStatus.POSTED],
@@ -184,6 +191,7 @@ async def create_transaction(
     # Invariant F-11: create audit history row
     await create_transaction_history(db, transaction, TransactionChangeType.CREATE, user_id)
 
+    await _rollup_refresh_fn()(db, user_id, transaction.occurred_at.date())  # F2-C: event-driven rollup refresh (D-02)
     return transaction
 
 
@@ -337,6 +345,7 @@ async def update_transaction(
     # Invariant F-11: create audit history row on update
     await create_transaction_history(db, tx, TransactionChangeType.UPDATE, user_id)
 
+    await _rollup_refresh_fn()(db, user_id, tx.occurred_at.date())  # F2-C: event-driven rollup refresh (D-02)
     return tx
 
 
@@ -360,6 +369,7 @@ async def void_transaction(
     # Invariant F-11: create audit history row on void
     await create_transaction_history(db, tx, TransactionChangeType.VOID, user_id)
 
+    await _rollup_refresh_fn()(db, user_id, tx.occurred_at.date())  # F2-C: event-driven rollup refresh (D-02)
     return tx
 
 
